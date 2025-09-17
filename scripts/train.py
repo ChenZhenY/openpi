@@ -2,9 +2,11 @@ import dataclasses
 import functools
 import logging
 import platform
+import time
 from typing import Any
 
 import etils.epath as epath
+
 import flax.nnx as nnx
 from flax.training import common_utils
 import flax.traverse_util as traverse_util
@@ -192,6 +194,11 @@ def train_step(
 
 
 def main(config: _config.TrainConfig):
+
+    # Track training start time for time-based checkpointing
+    training_start_time = time.time()
+    time_based_checkpoint_saved = False
+    
     init_logging()
     logging.info(f"Running on: {platform.node()}")
 
@@ -269,6 +276,14 @@ def main(config: _config.TrainConfig):
             infos = []
         batch = next(data_iter)
 
+        # Check for time-based checkpointing (1:52:00 = 6720 seconds)
+        elapsed_time = time.time() - training_start_time
+        if elapsed_time >= 6720 and not time_based_checkpoint_saved:
+            logging.info(f"Time-based checkpoint triggered at step {step} (elapsed time: {elapsed_time/3600:.2f}h)")
+            _checkpoints.save_state(checkpoint_manager, train_state, data_loader, step)
+            time_based_checkpoint_saved = True
+
+        # Regular checkpointing
         if (step % config.save_interval == 0 and step > start_step) or step == config.num_train_steps - 1:
             _checkpoints.save_state(checkpoint_manager, train_state, data_loader, step)
 
