@@ -5,16 +5,27 @@ import os
 import typing
 from typing import Literal, Protocol, SupportsIndex, TypeVar
 
+print("hi")
+
 import jax
 import jax.numpy as jnp
 import lerobot.common.datasets.lerobot_dataset as lerobot_dataset
 import numpy as np
 import torch
 
+print("hi")
+
 import openpi.models.model as _model
+print("1")
 import openpi.training.config as _config
+print("2")
 from openpi.training.droid_rlds_dataset import DroidRldsDataset
+print("3")
 import openpi.transforms as _transforms
+print("4")
+
+print("imported data_loader")
+
 
 T_co = TypeVar("T_co", covariant=True)
 

@@ -55,10 +55,15 @@ class WebsocketPolicyServer:
         while True:
             try:
                 start_time = time.monotonic()
-                obs = msgpack_numpy.unpackb(await websocket.recv())
+                data = msgpack_numpy.unpackb(await websocket.recv())
+
+                # Extract observation and optional parameters from the data
+                obs = data.get("observation", data)  # Fall back to data if "observation" key doesn't exist
+                prev_action = data.get("prev_action", None)
+                use_rtc = data.get("use_rtc", False)
 
                 infer_time = time.monotonic()
-                action = self._policy.infer(obs)
+                action = self._policy.infer(obs, prev_action=prev_action, use_rtc=use_rtc)
                 infer_time = time.monotonic() - infer_time
 
                 action["server_timing"] = {

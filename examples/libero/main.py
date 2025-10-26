@@ -1,4 +1,3 @@
-import collections
 import dataclasses
 import logging
 import math
@@ -9,6 +8,7 @@ from libero.libero import benchmark
 from libero.libero import get_libero_path
 from libero.libero.envs import OffScreenRenderEnv
 import numpy as np
+from openpi_client import action_chunk_broker
 from openpi_client import image_tools
 from openpi_client import websocket_client_policy as _websocket_client_policy
 import tqdm
@@ -27,6 +27,7 @@ class Args:
     port: int = 8000
     resize_size: int = 224
     replan_steps: int = 5
+    action_horizon: int = 10  # Action horizon for ActionChunkBroker (matches Libero model config)
 
     #################################################################################################################
     # LIBERO environment-specific parameters
@@ -43,6 +44,8 @@ class Args:
     video_out_path: str = "data/libero/videos"  # Path to save videos
 
     seed: int = 7  # Random Seed (for reproducibility)
+
+    use_rtc: bool = True
 
 
 def eval_libero(args: Args) -> None:
@@ -70,7 +73,12 @@ def eval_libero(args: Args) -> None:
     else:
         raise ValueError(f"Unknown task suite: {args.task_suite_name}")
 
-    client = _websocket_client_policy.WebsocketClientPolicy(args.host, args.port)
+    ws_client = _websocket_client_policy.WebsocketClientPolicy(args.host, args.port)
+    client = action_chunk_broker.ActionChunkBroker(
+        policy=ws_client,
+        action_horizon=args.action_horizon,
+        is_rtc=args.use_rtc,
+    )
 
     # Start evaluation
     total_episodes, total_successes = 0, 0
@@ -91,7 +99,9 @@ def eval_libero(args: Args) -> None:
 
             # Reset environment
             env.reset()
-            action_plan = collections.deque()
+            
+            # Reset the action chunk broker for each episode
+            client.reset()
 
             # Set initial states
             obs = env.set_init_state(initial_states[episode_idx])
@@ -124,30 +134,22 @@ def eval_libero(args: Args) -> None:
                     # Save preprocessed image for replay video
                     replay_images.append(img)
 
-                    if not action_plan:
-                        # Finished executing previous action chunk -- compute new chunk
-                        # Prepare observations dict
-                        element = {
-                            "observation/image": img,
-                            "observation/wrist_image": wrist_img,
-                            "observation/state": np.concatenate(
-                                (
-                                    obs["robot0_eef_pos"],
-                                    _quat2axisangle(obs["robot0_eef_quat"]),
-                                    obs["robot0_gripper_qpos"],
-                                )
-                            ),
-                            "prompt": str(task_description),
-                        }
+                    # Prepare observations dict
+                    element = {
+                        "observation/image": img,
+                        "observation/wrist_image": wrist_img,
+                        "observation/state": np.concatenate(
+                            (
+                                obs["robot0_eef_pos"],
+                                _quat2axisangle(obs["robot0_eef_quat"]),
+                                obs["robot0_gripper_qpos"],
+                            )
+                        ),
+                        "prompt": str(task_description),
+                    }
 
-                        # Query model to get action
-                        action_chunk = client.infer(element)["actions"]
-                        assert (
-                            len(action_chunk) >= args.replan_steps
-                        ), f"We want to replan every {args.replan_steps} steps, but policy only predicts {len(action_chunk)} steps."
-                        action_plan.extend(action_chunk[: args.replan_steps])
-
-                    action = action_plan.popleft()
+                    # Query model to get action (ActionChunkBroker returns single action)
+                    action = client.infer(element)["actions"]
 
                     # Execute action in environment
                     obs, reward, done, info = env.step(action.tolist())
@@ -168,7 +170,7 @@ def eval_libero(args: Args) -> None:
             suffix = "success" if done else "failure"
             task_segment = task_description.replace(" ", "_")
             imageio.mimwrite(
-                pathlib.Path(args.video_out_path) / f"rollout_{task_segment}_{suffix}.mp4",
+                pathlib.Path(args.video_out_path) / f"rollout_{task_segment}_{suffix}_episode_{episode_idx}.mp4",
                 [np.asarray(x) for x in replay_images],
                 fps=10,
             )
