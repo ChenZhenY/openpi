@@ -868,20 +868,51 @@ _CONFIGS = [
         ema_decay=None,
     ),
     TrainConfig(
+        name="pi05_liberogoal_filtered_bc_lora",
+        # model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=10, paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora"),
+        data=LeRobotLiberoDataConfig(
+            repo_id="lerobot_filtered_bc_libero_goal_8tasks_1022", # NOTE: using pre converted libero_90 dataset
+            base_config=DataConfig(prompt_from_task=True),
+            extra_delta_transform=False,
+        ),
+
+        save_interval=2000,
+
+        num_train_steps=30_000,
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_libero/params"), # NOTE: using pi05_libero base model
+
+        freeze_filter=pi0_config.Pi0Config(
+            paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora"
+        ).get_freeze_filter(),
+        # Turn off EMA for LoRA finetuning.
+        ema_decay=None,
+    ),
+    TrainConfig(
         name="pi05_libero90_lora_reasoning_prompt",
         # Model config with LoRA for efficient fine-tuning
         model=pi0_config.Pi0Config(pi05=True, action_horizon=10, paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora"),
         # Use reasoning data config that replaces task prompts with reasoning components
+        # NOTE: skynet
+        # data=LeRobotLiberoDataConfigWithReasoning(
+        #     repo_id="libero_90_lerobot", # NOTE: using pre converted libero_90 dataset
+        #     base_config=DataConfig(prompt_from_task=True),
+        #     extra_delta_transform=False,
+        #     mapping_file_path="/coc/flash7/zhenyang/VLA-data-augmentation/ECoT_LeRobot_data_ID_mapping/mapping.json",
+        #     reasoning_file_path="/coc/flash7/zhenyang/data/embodied_features_and_demos_libero/libero_reasonings.json",
+        #     reasoning_components=["subtask", "movement"],
+        # ),
+        # NOTE: ICE
         data=LeRobotLiberoDataConfigWithReasoning(
             repo_id="libero_90_lerobot", # NOTE: using pre converted libero_90 dataset
             base_config=DataConfig(prompt_from_task=True),
             extra_delta_transform=False,
-            mapping_file_path="/coc/flash7/zhenyang/VLA-data-augmentation/ECoT_LeRobot_data_ID_mapping/mapping.json",
-            reasoning_file_path="/coc/flash7/zhenyang/data/embodied_features_and_demos_libero/libero_reasonings.json",
-            eval=False,
+            mapping_file_path="/home/hice1/zchen927/scratch/datasets/mapping.json",
+            reasoning_file_path="/home/hice1/zchen927/scratch/datasets/libero_reasonings.json",
             reasoning_components=["subtask", "movement"],
         ),
-
+        
+        save_interval=500,
         num_train_steps=30_000,
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_libero/params"), # NOTE: using pi05_libero base model
 
