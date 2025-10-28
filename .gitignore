@@ -175,3 +175,5 @@ policy_logs/
 !*.schema.json
 credentials/
 secrets/
+
+output/
