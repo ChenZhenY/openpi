@@ -32,6 +32,7 @@ class WebsocketPolicyServer:
         logging.getLogger("websockets.server").setLevel(logging.INFO)
 
     def serve_forever(self) -> None:
+        self._warmup()
         asyncio.run(self.run())
 
     async def run(self):
@@ -81,6 +82,11 @@ class WebsocketPolicyServer:
                     reason="Internal server error. Traceback included in previous frame.",
                 )
                 raise
+
+    def _warmup(self) -> None:
+        logger.info("Warming up policy...")
+        observation = self._policy.make_example()
+        self._policy.infer_batch([observation])
 
 
 def _health_check(connection: _server.ServerConnection, request: _server.Request) -> _server.Response | None:

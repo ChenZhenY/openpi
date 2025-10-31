@@ -1,5 +1,4 @@
 import dataclasses
-import enum
 import logging
 import socket
 from typing import Any
@@ -8,17 +7,9 @@ import tyro
 
 from openpi.policies import policy as _policy
 from openpi.policies import policy_config as _policy_config
+from openpi.policies.policy import EnvMode
 from openpi.serving import websocket_policy_server
 from openpi.training import config as _config
-
-
-class EnvMode(enum.Enum):
-    """Supported environments."""
-
-    ALOHA = "aloha"
-    ALOHA_SIM = "aloha_sim"
-    DROID = "droid"
-    LIBERO = "libero"
 
 
 @dataclasses.dataclass
@@ -115,6 +106,7 @@ def main(args: Args) -> None:
     policy_metadata = policy.metadata
     policy_metadata["num_steps"] = args.num_steps
     policy_metadata["action_horizon"] = policy._model.action_horizon
+    policy_metadata["env"] = args.env.value
 
     # Record the policy's behavior.
     if args.record:
