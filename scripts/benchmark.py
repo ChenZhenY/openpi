@@ -205,6 +205,7 @@ async def benchmark(
         print(f"Server metadata: {metadata}")
         assert "num_steps" in metadata, "num_steps not found in server metadata"
         assert "action_horizon" in metadata, "action_horizon not found in server metadata"
+        assert "batch_size" in metadata, "batch_size not found in server metadata"
 
         # Warm-up request
         print("Running warm-up request...")
@@ -276,6 +277,7 @@ async def benchmark(
         "env": env.value,
         "num_steps": metadata["num_steps"],
         "action_horizon": metadata["action_horizon"],
+        "batch_size": metadata["batch_size"],
         "num_requests": num_requests,
         "request_rate": request_rate if request_rate != float("inf") else "inf",
         "max_concurrency": max_concurrency,

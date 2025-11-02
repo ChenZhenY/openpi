@@ -46,6 +46,9 @@ class Args:
     # Specifies how to load the policy. If not provided, the default policy for the environment will be used.
     policy: Checkpoint | Default = dataclasses.field(default_factory=Default)
 
+    # Batch size to use for inference.
+    batch_size: int = 1
+
     # Number of steps to use for sampling.
     num_steps: int = 10
 
@@ -102,25 +105,43 @@ def create_policy(args: Args) -> _policy.Policy:
 
 
 def main(args: Args) -> None:
-    policy = create_policy(args)
-    policy_metadata = policy.metadata
-    policy_metadata["num_steps"] = args.num_steps
-    policy_metadata["action_horizon"] = policy._model.action_horizon
-    policy_metadata["env"] = args.env.value
+    # Create policy factory to avoid CUDA context fork issues
+    def policy_factory():
+        policy = create_policy(args)
+        # Ensure policy metadata includes env for make_example()
+        if "env" not in policy._metadata:
+            policy._metadata["env"] = args.env.value
+        # Record the policy's behavior.
+        if args.record:
+            policy = _policy.PolicyRecorder(policy, "policy_records")
+        return policy
 
-    # Record the policy's behavior.
-    if args.record:
-        policy = _policy.PolicyRecorder(policy, "policy_records")
+    # Build metadata without loading the model to avoid CUDA initialization
+    match args.policy:
+        case Checkpoint():
+            train_config = _config.get_config(args.policy.config)
+        case Default():
+            if checkpoint := DEFAULT_CHECKPOINT.get(args.env):
+                train_config = _config.get_config(checkpoint.config)
+            else:
+                raise ValueError(f"Unsupported environment mode: {args.env}")
+
+    policy_metadata = train_config.policy_metadata or {}
+    policy_metadata["num_steps"] = args.num_steps
+    policy_metadata["action_horizon"] = train_config.model.action_horizon
+    policy_metadata["env"] = args.env.value
+    policy_metadata["batch_size"] = args.batch_size
 
     hostname = socket.gethostname()
     local_ip = socket.gethostbyname(hostname)
     logging.info("Creating server (host: %s, ip: %s)", hostname, local_ip)
 
     server = websocket_policy_server.WebsocketPolicyServer(
-        policy=policy,
+        policy_factory=policy_factory,
         host="0.0.0.0",
         port=args.port,
         metadata=policy_metadata,
+        batch_size=args.batch_size,
     )
     server.serve_forever()
 
