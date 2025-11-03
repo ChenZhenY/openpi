@@ -1,114 +1,0 @@
-warning: The `tool.uv.dev-dependencies` field (used in `packages/openpi-client/pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
-slurmstepd: error: *** JOB 1861009 ON consu CANCELLED AT 2025-10-28T23:09:34 ***
-[robosuite WARNING] No private macro file found! (macros.py:53)
-[robosuite WARNING] It is recommended to use a private macro file (macros.py:54)
-[robosuite WARNING] To setup, run: python /coc/flash8/rbansal66/openpi_rollout/openpi/examples/libero/.venv/lib/python3.8/site-packages/robosuite/scripts/setup_macros.py (macros.py:55)
-INFO:root:Task suite: libero_10
-INFO:root:Waiting for server at ws://0.0.0.0:8080...
-INFO:root:Still waiting for server...
-INFO:root:Still waiting for server...
-INFO:root:Still waiting for server...
-  0%|          | 0/10 [00:00<?, ?it/s]/coc/flash8/rbansal66/openpi_rollout/openpi/examples/libero/.venv/lib/python3.8/site-packages/numba/np/arraymath.py:3845: DeprecationWarning: `np.MachAr` is deprecated (NumPy 1.22).
-  @overload(np.MachAr)
-
-  0%|          | 0/20 [00:00<?, ?it/s][AINFO:root:
-Task: put both the alphabet soup and the tomato sauce in the basket
-INFO:root:Starting episode 1...
-INFO:root:Success: False
-INFO:root:# episodes completed so far: 1
-INFO:root:# successes: 0 (0.0%)
-
-  5%|▌         | 1/20 [01:08<21:34, 68.16s/it][AINFO:root:
-Task: put both the alphabet soup and the tomato sauce in the basket
-INFO:root:Starting episode 2...
-INFO:root:Success: False
-INFO:root:# episodes completed so far: 2
-INFO:root:# successes: 0 (0.0%)
-
- 10%|█         | 2/20 [01:23<11:04, 36.93s/it][AINFO:root:
-Task: put both the alphabet soup and the tomato sauce in the basket
-INFO:root:Starting episode 3...
-INFO:root:Success: False
-INFO:root:# episodes completed so far: 3
-INFO:root:# successes: 0 (0.0%)
-
- 15%|█▌        | 3/20 [01:38<07:37, 26.93s/it][AINFO:root:
-Task: put both the alphabet soup and the tomato sauce in the basket
-INFO:root:Starting episode 4...
-INFO:root:Success: False
-INFO:root:# episodes completed so far: 4
-INFO:root:# successes: 0 (0.0%)
-
- 20%|██        | 4/20 [01:53<05:56, 22.27s/it][AINFO:root:
-Task: put both the alphabet soup and the tomato sauce in the basket
-INFO:root:Starting episode 5...
-INFO:root:Success: False
-INFO:root:# episodes completed so far: 5
-INFO:root:# successes: 0 (0.0%)
-
- 25%|██▌       | 5/20 [02:08<04:53, 19.59s/it][AINFO:root:
-Task: put both the alphabet soup and the tomato sauce in the basket
-INFO:root:Starting episode 6...
-INFO:root:Success: False
-INFO:root:# episodes completed so far: 6
-INFO:root:# successes: 0 (0.0%)
-
- 30%|███       | 6/20 [02:23<04:15, 18.22s/it][AINFO:root:
-Task: put both the alphabet soup and the tomato sauce in the basket
-INFO:root:Starting episode 7...
-INFO:root:Success: False
-INFO:root:# episodes completed so far: 7
-INFO:root:# successes: 0 (0.0%)
-
- 35%|███▌      | 7/20 [02:39<03:45, 17.34s/it][AINFO:root:
-Task: put both the alphabet soup and the tomato sauce in the basket
-INFO:root:Starting episode 8...
-INFO:root:Success: False
-INFO:root:# episodes completed so far: 8
-INFO:root:# successes: 0 (0.0%)
-
- 40%|████      | 8/20 [02:54<03:19, 16.64s/it][AINFO:root:
-Task: put both the alphabet soup and the tomato sauce in the basket
-INFO:root:Starting episode 9...
-INFO:root:Success: False
-INFO:root:# episodes completed so far: 9
-INFO:root:# successes: 0 (0.0%)
-
- 45%|████▌     | 9/20 [03:10<03:01, 16.47s/it][AINFO:root:
-Task: put both the alphabet soup and the tomato sauce in the basket
-INFO:root:Starting episode 10...
-INFO:root:Success: False
-INFO:root:# episodes completed so far: 10
-INFO:root:# successes: 0 (0.0%)
-
- 50%|█████     | 10/20 [03:26<02:42, 16.28s/it][AINFO:root:
-Task: put both the alphabet soup and the tomato sauce in the basket
-INFO:root:Starting episode 11...
-INFO:root:Success: False
-INFO:root:# episodes completed so far: 11
-INFO:root:# successes: 0 (0.0%)
-
- 55%|█████▌    | 11/20 [03:41<02:22, 15.87s/it][AINFO:root:
-Task: put both the alphabet soup and the tomato sauce in the basket
-INFO:root:Starting episode 12...
-INFO:root:Success: False
-INFO:root:# episodes completed so far: 12
-INFO:root:# successes: 0 (0.0%)
-
- 60%|██████    | 12/20 [03:56<02:04, 15.60s/it][AINFO:root:
-Task: put both the alphabet soup and the tomato sauce in the basket
-INFO:root:Starting episode 13...
-INFO:root:Success: False
-INFO:root:# episodes completed so far: 13
-INFO:root:# successes: 0 (0.0%)
-
- 65%|██████▌   | 13/20 [04:11<01:47, 15.35s/it][AINFO:root:
-Task: put both the alphabet soup and the tomato sauce in the basket
-INFO:root:Starting episode 14...
-INFO:root:Success: False
-INFO:root:# episodes completed so far: 14
-INFO:root:# successes: 0 (0.0%)
-
- 70%|███████   | 14/20 [04:26<01:31, 15.31s/it][AINFO:root:
-Task: put both the alphabet soup and the tomato sauce in the basket
-INFO:root:Starting episode 15...
