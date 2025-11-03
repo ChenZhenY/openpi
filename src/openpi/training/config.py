@@ -875,9 +875,15 @@ _CONFIGS = [
             repo_id="lerobot_filtered_bc_libero_goal_8tasks_1022", # NOTE: using pre converted libero_90 dataset
             base_config=DataConfig(prompt_from_task=True),
             extra_delta_transform=False,
+            # NOTE: using norm stats from pi05 libero dataset
+            assets=AssetsConfig(
+                assets_dir="/home/hice1/zchen927/scratch/openpi/assets/pi05_libero/physical-intelligence",
+                asset_id="libero",
+            ),
         ),
 
-        save_interval=2000,
+        save_interval=500,
+        keep_period=500,
 
         num_train_steps=30_000,
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_libero/params"), # NOTE: using pi05_libero base model
@@ -887,6 +893,65 @@ _CONFIGS = [
         ).get_freeze_filter(),
         # Turn off EMA for LoRA finetuning.
         ema_decay=None,
+    ),
+    TrainConfig(
+        name="pi05_liberogoal_teleop_lora",
+        # model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=10, paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora"),
+        data=LeRobotLiberoDataConfig(
+            repo_id="lerobot_put_bowl_on_stove_teleop_120_1103", # NOTE: using pre converted libero_90 dataset
+            base_config=DataConfig(prompt_from_task=True),
+            extra_delta_transform=False,
+            # NOTE: using norm stats from pi05 libero dataset
+            assets=AssetsConfig(
+                assets_dir="/home/hice1/zchen927/scratch/openpi/assets/pi05_libero/physical-intelligence",
+                asset_id="libero",
+            ),
+        ),
+
+        save_interval=1000,
+        keep_period=2000,
+
+        num_train_steps=30_000,
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_libero/params"), # NOTE: using pi05_libero base model
+
+        freeze_filter=pi0_config.Pi0Config(
+            paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora"
+        ).get_freeze_filter(),
+        # Turn off EMA for LoRA finetuning.
+        ema_decay=None,
+    ),
+    TrainConfig(
+        name="pi05_liberogoal_teleop",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
+        # model=pi0_config.Pi0Config(pi05=True, action_horizon=10, paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora"),
+        data=LeRobotLiberoDataConfig(
+            # NOTE: norm stats is set accordingly to the repo_id
+            # NOTE: if u want to use the norm stats from default dataset, add an assets config
+            repo_id="lerobot_put_bowl_on_stove_teleop_120_1029", # NOTE: using pre converted libero_90 dataset
+            base_config=DataConfig(prompt_from_task=True),
+            extra_delta_transform=False,
+            # assets=AssetsConfig(
+            #     assets_dir="/home/hice1/zchen927/scratch/openpi/assets/pi05_libero/physical-intelligence",
+            #     asset_id="libero",
+            # ),
+        ),
+
+        batch_size=256,
+        num_train_steps=30_000,
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_libero/params"), # NOTE: using pi05_libero base model
+
+        save_interval=1000,
+        keep_period=2000,
+
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=10_000,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
     ),
     TrainConfig(
         name="pi05_libero90_lora_reasoning_prompt",
