@@ -407,26 +407,3 @@ class Pi0(_model.BaseModel):
         x_0, _ = jax.lax.while_loop(cond, step, (noise, 1.0))
         
         return x_0
-        # # 在guided_inference最后保存前14个关节的平均值，每次调用都保存一次
-        # def save_guided_inference_result(x_0):
-        #     import numpy as np
-        #     import time as time_module
-        #     # 计算前14个关节的平均值
-        #     first_14_joints = x_0[:, :, :14]
-        #     joint_averages = np.mean(first_14_joints, axis=1)
-        #     # 创建时间戳
-        #     timestamp = time_module.strftime("%Y%m%d_%H%M%S")
-        #     # 保存为numpy格式
-        #     # np.save(f'guided_inference_joint_averages_{timestamp}.npy', joint_averages)
-        #     # 保存为文本格式便于查看
-        #     np.savetxt(f'guided_inference_joint_averages_{timestamp}.txt', first_14_joints[0], fmt='%.6f')
-        #     # 保存详细信息
-        #     # with open(f'guided_inference_info_{timestamp}.txt', 'w') as f:
-        #     #     f.write(f"Timestamp: {timestamp}\n")
-        #     #     f.write(f"Joint averages shape: {joint_averages.shape}\n")
-        #     #     f.write(f"Full action shape: {x_0.shape}\n")
-        #     #     f.write(f"Joint averages:\n{joint_averages}\n")
-        #     return x_0
-        # 使用jax.pure_callback来执行文件保存操作
-        # x_0 = jax.pure_callback(save_guided_inference_result, jax.ShapeDtypeStruct(x_0.shape, x_0.dtype), x_0)
-        # return x_0
