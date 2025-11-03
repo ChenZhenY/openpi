@@ -1,0 +1,16 @@
+======================================
+Job ID: 1860579
+Running with args.action_horizon=100
+======================================
+Starting background process for horizon 100 (default): serve_policy.py --env=LIBERO
+Background process started with PID: 1564318
+Running libero client...
+here
+here
+1
+2
+3
+imported checkpoints
+[info] using task orders [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+initialized with s: 40, d: 6
+RTC setting:  True action horizon:  100 s:  40 d:  6

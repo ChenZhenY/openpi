@@ -61,9 +61,11 @@ class WebsocketPolicyServer:
                 obs = data.get("observation", data)  # Fall back to data if "observation" key doesn't exist
                 prev_action = data.get("prev_action", None)
                 use_rtc = data.get("use_rtc", False)
+                s_param = data.get("s_param", 5)
+                d_param = data.get("d_param", 4)
 
                 infer_time = time.monotonic()
-                action = self._policy.infer(obs, prev_action=prev_action, use_rtc=use_rtc)
+                action = self._policy.infer(obs, prev_action=prev_action, use_rtc=use_rtc, s_param=s_param, d_param=d_param)
                 infer_time = time.monotonic() - infer_time
 
                 action["server_timing"] = {

@@ -1,0 +1,1331 @@
+warning: The `tool.uv.dev-dependencies` field (used in `packages/openpi-client/pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
+[robosuite WARNING] No private macro file found! (macros.py:53)
+[robosuite WARNING] It is recommended to use a private macro file (macros.py:54)
+[robosuite WARNING] To setup, run: python /coc/flash8/rbansal66/openpi_rollout/openpi/examples/libero/.venv/lib/python3.8/site-packages/robosuite/scripts/setup_macros.py (macros.py:55)
+INFO:root:Task suite: libero_10
+INFO:root:Waiting for server at ws://0.0.0.0:8080...
+INFO:root:Still waiting for server...
+INFO:root:Still waiting for server...
+INFO:root:Loading model...
+INFO:2025-10-28 21:21:16,687:jax._src.xla_bridge:925: Unable to initialize backend 'rocm': module 'jaxlib.xla_extension' has no attribute 'GpuAllocatorConfig'
+INFO:jax._src.xla_bridge:Unable to initialize backend 'rocm': module 'jaxlib.xla_extension' has no attribute 'GpuAllocatorConfig'
+INFO:2025-10-28 21:21:16,692:jax._src.xla_bridge:925: Unable to initialize backend 'tpu': INTERNAL: Failed to open libtpu.so: libtpu.so: cannot open shared object file: No such file or directory
+INFO:jax._src.xla_bridge:Unable to initialize backend 'tpu': INTERNAL: Failed to open libtpu.so: libtpu.so: cannot open shared object file: No such file or directory
+INFO:absl:orbax-checkpoint version: 0.11.13
+INFO:absl:Created BasePyTreeCheckpointHandler: use_ocdbt=True, use_zarr3=False, pytree_metadata_options=PyTreeMetadataOptions(support_rich_types=False), array_metadata_store=<orbax.checkpoint._src.metadata.array_metadata_store.Store object at 0x7f01fd98a7d0>
+INFO:absl:Restoring checkpoint from /coc/flash8/rbansal66/openpi/checkpoints/pi05_libero_lora/libero_lora_finetune_single_gpu/10000/params.
+INFO:absl:[thread=MainThread] Failed to get flag value for EXPERIMENTAL_ORBAX_USE_DISTRIBUTED_PROCESS_ID.
+INFO:root:Still waiting for server...
+INFO:root:Still waiting for server...
+INFO:absl:[process=0] /jax/checkpoint/read/bytes_per_sec: 800.2 MiB/s (total bytes: 6.3 GiB) (time elapsed: 8 seconds) (per-host)
+INFO:absl:Finished restoring checkpoint in 8.11 seconds from /coc/flash8/rbansal66/openpi/checkpoints/pi05_libero_lora/libero_lora_finetune_single_gpu/10000/params.
+INFO:root:Norm stats not found in /coc/flash8/rbansal66/openpi_rollout/openpi/assets/pi05_libero_lora/physical-intelligence/libero, skipping.
+INFO:root:Loaded norm stats from /coc/flash8/rbansal66/openpi/checkpoints/pi05_libero_lora/libero_lora_finetune_single_gpu/10000/assets/physical-intelligence/libero
+INFO:root:Creating server (host: gundam, ip: 127.0.1.1)
+INFO:websockets.server:server listening on 0.0.0.0:8080
+INFO:websockets.server:connection open
+INFO:openpi.serving.websocket_policy_server:Connection from ('127.0.0.1', 35168) opened
+  0%|          | 0/10 [00:00<?, ?it/s]/coc/flash8/rbansal66/openpi_rollout/openpi/examples/libero/.venv/lib/python3.8/site-packages/numba/np/arraymath.py:3845: DeprecationWarning: `np.MachAr` is deprecated (NumPy 1.22).
+  @overload(np.MachAr)
+
+  0%|          | 0/20 [00:00<?, ?it/s][AINFO:root:
+Task: put both the alphabet soup and the tomato sauce in the basket
+INFO:root:Starting episode 1...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 1
+INFO:root:# successes: 0 (0.0%)
+
+  5%|▌         | 1/20 [01:10<22:18, 70.44s/it][AINFO:root:
+Task: put both the alphabet soup and the tomato sauce in the basket
+INFO:root:Starting episode 2...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 2
+INFO:root:# successes: 0 (0.0%)
+
+ 10%|█         | 2/20 [01:23<11:05, 36.96s/it][AINFO:root:
+Task: put both the alphabet soup and the tomato sauce in the basket
+INFO:root:Starting episode 3...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 3
+INFO:root:# successes: 0 (0.0%)
+
+ 15%|█▌        | 3/20 [01:37<07:27, 26.33s/it][AINFO:root:
+Task: put both the alphabet soup and the tomato sauce in the basket
+INFO:root:Starting episode 4...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 4
+INFO:root:# successes: 0 (0.0%)
+
+ 20%|██        | 4/20 [01:50<05:39, 21.19s/it][AINFO:root:
+Task: put both the alphabet soup and the tomato sauce in the basket
+INFO:root:Starting episode 5...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 5
+INFO:root:# successes: 0 (0.0%)
+
+ 25%|██▌       | 5/20 [02:04<04:35, 18.35s/it][AINFO:root:
+Task: put both the alphabet soup and the tomato sauce in the basket
+INFO:root:Starting episode 6...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 6
+INFO:root:# successes: 0 (0.0%)
+
+ 30%|███       | 6/20 [02:17<03:53, 16.65s/it][AINFO:root:
+Task: put both the alphabet soup and the tomato sauce in the basket
+INFO:root:Starting episode 7...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 7
+INFO:root:# successes: 0 (0.0%)
+
+ 35%|███▌      | 7/20 [02:31<03:23, 15.65s/it][AINFO:root:
+Task: put both the alphabet soup and the tomato sauce in the basket
+INFO:root:Starting episode 8...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 8
+INFO:root:# successes: 0 (0.0%)
+
+ 40%|████      | 8/20 [02:45<03:01, 15.09s/it][AINFO:root:
+Task: put both the alphabet soup and the tomato sauce in the basket
+INFO:root:Starting episode 9...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 9
+INFO:root:# successes: 0 (0.0%)
+
+ 45%|████▌     | 9/20 [02:58<02:39, 14.53s/it][AINFO:root:
+Task: put both the alphabet soup and the tomato sauce in the basket
+INFO:root:Starting episode 10...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 10
+INFO:root:# successes: 0 (0.0%)
+
+ 50%|█████     | 10/20 [03:11<02:21, 14.11s/it][AINFO:root:
+Task: put both the alphabet soup and the tomato sauce in the basket
+INFO:root:Starting episode 11...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 11
+INFO:root:# successes: 0 (0.0%)
+
+ 55%|█████▌    | 11/20 [03:24<02:04, 13.83s/it][AINFO:root:
+Task: put both the alphabet soup and the tomato sauce in the basket
+INFO:root:Starting episode 12...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 12
+INFO:root:# successes: 0 (0.0%)
+
+ 60%|██████    | 12/20 [03:37<01:49, 13.63s/it][AINFO:root:
+Task: put both the alphabet soup and the tomato sauce in the basket
+INFO:root:Starting episode 13...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 13
+INFO:root:# successes: 0 (0.0%)
+
+ 65%|██████▌   | 13/20 [03:51<01:34, 13.50s/it][AINFO:root:
+Task: put both the alphabet soup and the tomato sauce in the basket
+INFO:root:Starting episode 14...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 14
+INFO:root:# successes: 0 (0.0%)
+
+ 70%|███████   | 14/20 [04:04<01:20, 13.50s/it][AINFO:root:
+Task: put both the alphabet soup and the tomato sauce in the basket
+INFO:root:Starting episode 15...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 15
+INFO:root:# successes: 0 (0.0%)
+
+ 75%|███████▌  | 15/20 [04:18<01:08, 13.67s/it][AINFO:root:
+Task: put both the alphabet soup and the tomato sauce in the basket
+INFO:root:Starting episode 16...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 16
+INFO:root:# successes: 0 (0.0%)
+
+ 80%|████████  | 16/20 [04:31<00:54, 13.56s/it][AINFO:root:
+Task: put both the alphabet soup and the tomato sauce in the basket
+INFO:root:Starting episode 17...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 17
+INFO:root:# successes: 0 (0.0%)
+
+ 85%|████████▌ | 17/20 [04:45<00:40, 13.51s/it][AINFO:root:
+Task: put both the alphabet soup and the tomato sauce in the basket
+INFO:root:Starting episode 18...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 18
+INFO:root:# successes: 0 (0.0%)
+
+ 90%|█████████ | 18/20 [04:58<00:27, 13.52s/it][AINFO:root:
+Task: put both the alphabet soup and the tomato sauce in the basket
+INFO:root:Starting episode 19...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 19
+INFO:root:# successes: 0 (0.0%)
+
+ 95%|█████████▌| 19/20 [05:12<00:13, 13.51s/it][AINFO:root:
+Task: put both the alphabet soup and the tomato sauce in the basket
+INFO:root:Starting episode 20...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 20
+INFO:root:# successes: 0 (0.0%)
+
+100%|██████████| 20/20 [05:25<00:00, 13.42s/it][A100%|██████████| 20/20 [05:25<00:00, 16.28s/it]
+INFO:root:Current task success rate: 0.0
+INFO:root:Current total success rate: 0.0
+ 10%|█         | 1/10 [05:28<49:18, 328.70s/it]
+  0%|          | 0/20 [00:00<?, ?it/s][AINFO:root:
+Task: turn on the stove and put the moka pot on it
+INFO:root:Starting episode 1...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 21
+INFO:root:# successes: 0 (0.0%)
+
+  5%|▌         | 1/20 [00:11<03:44, 11.83s/it][AINFO:root:
+Task: turn on the stove and put the moka pot on it
+INFO:root:Starting episode 2...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 22
+INFO:root:# successes: 0 (0.0%)
+
+ 10%|█         | 2/20 [00:23<03:33, 11.86s/it][AINFO:root:
+Task: turn on the stove and put the moka pot on it
+INFO:root:Starting episode 3...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 23
+INFO:root:# successes: 0 (0.0%)
+
+ 15%|█▌        | 3/20 [00:35<03:21, 11.86s/it][AINFO:root:
+Task: turn on the stove and put the moka pot on it
+INFO:root:Starting episode 4...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 24
+INFO:root:# successes: 0 (0.0%)
+
+ 20%|██        | 4/20 [00:47<03:09, 11.86s/it][AINFO:root:
+Task: turn on the stove and put the moka pot on it
+INFO:root:Starting episode 5...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 25
+INFO:root:# successes: 0 (0.0%)
+
+ 25%|██▌       | 5/20 [00:59<02:57, 11.81s/it][AINFO:root:
+Task: turn on the stove and put the moka pot on it
+INFO:root:Starting episode 6...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 26
+INFO:root:# successes: 0 (0.0%)
+
+ 30%|███       | 6/20 [01:10<02:45, 11.80s/it][AINFO:root:
+Task: turn on the stove and put the moka pot on it
+INFO:root:Starting episode 7...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 27
+INFO:root:# successes: 0 (0.0%)
+
+ 35%|███▌      | 7/20 [01:22<02:33, 11.78s/it][AINFO:root:
+Task: turn on the stove and put the moka pot on it
+INFO:root:Starting episode 8...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 28
+INFO:root:# successes: 0 (0.0%)
+
+ 40%|████      | 8/20 [01:34<02:21, 11.76s/it][AINFO:root:
+Task: turn on the stove and put the moka pot on it
+INFO:root:Starting episode 9...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 29
+INFO:root:# successes: 0 (0.0%)
+
+ 45%|████▌     | 9/20 [01:46<02:10, 11.85s/it][AINFO:root:
+Task: turn on the stove and put the moka pot on it
+INFO:root:Starting episode 10...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 30
+INFO:root:# successes: 0 (0.0%)
+
+ 50%|█████     | 10/20 [01:58<01:58, 11.88s/it][AINFO:root:
+Task: turn on the stove and put the moka pot on it
+INFO:root:Starting episode 11...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 31
+INFO:root:# successes: 0 (0.0%)
+
+ 55%|█████▌    | 11/20 [02:10<01:47, 11.90s/it][AINFO:root:
+Task: turn on the stove and put the moka pot on it
+INFO:root:Starting episode 12...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 32
+INFO:root:# successes: 0 (0.0%)
+
+ 60%|██████    | 12/20 [02:22<01:35, 11.91s/it][AINFO:root:
+Task: turn on the stove and put the moka pot on it
+INFO:root:Starting episode 13...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 33
+INFO:root:# successes: 0 (0.0%)
+
+ 65%|██████▌   | 13/20 [02:34<01:23, 11.89s/it][AINFO:root:
+Task: turn on the stove and put the moka pot on it
+INFO:root:Starting episode 14...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 34
+INFO:root:# successes: 0 (0.0%)
+
+ 70%|███████   | 14/20 [02:46<01:11, 11.93s/it][AINFO:root:
+Task: turn on the stove and put the moka pot on it
+INFO:root:Starting episode 15...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 35
+INFO:root:# successes: 0 (0.0%)
+
+ 75%|███████▌  | 15/20 [02:57<00:59, 11.89s/it][AINFO:root:
+Task: turn on the stove and put the moka pot on it
+INFO:root:Starting episode 16...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 36
+INFO:root:# successes: 0 (0.0%)
+
+ 80%|████████  | 16/20 [03:09<00:47, 11.86s/it][AINFO:root:
+Task: turn on the stove and put the moka pot on it
+INFO:root:Starting episode 17...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 37
+INFO:root:# successes: 0 (0.0%)
+
+ 85%|████████▌ | 17/20 [03:21<00:35, 11.87s/it][AINFO:root:
+Task: turn on the stove and put the moka pot on it
+INFO:root:Starting episode 18...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 38
+INFO:root:# successes: 0 (0.0%)
+
+ 90%|█████████ | 18/20 [03:33<00:23, 11.83s/it][AINFO:root:
+Task: turn on the stove and put the moka pot on it
+INFO:root:Starting episode 19...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 39
+INFO:root:# successes: 0 (0.0%)
+
+ 95%|█████████▌| 19/20 [03:45<00:11, 11.79s/it][AINFO:root:
+Task: turn on the stove and put the moka pot on it
+INFO:root:Starting episode 20...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 40
+INFO:root:# successes: 0 (0.0%)
+
+100%|██████████| 20/20 [03:56<00:00, 11.75s/it][A100%|██████████| 20/20 [03:56<00:00, 11.84s/it]
+INFO:root:Current task success rate: 0.0
+INFO:root:Current total success rate: 0.0
+ 30%|███       | 3/10 [09:25<20:11, 173.10s/it]
+  0%|          | 0/20 [00:00<?, ?it/s][AINFO:root:
+Task: put the black bowl in the bottom drawer of the cabinet and close it
+INFO:root:Starting episode 1...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 41
+INFO:root:# successes: 0 (0.0%)
+
+  5%|▌         | 1/20 [00:12<03:51, 12.21s/it][AINFO:root:
+Task: put the black bowl in the bottom drawer of the cabinet and close it
+INFO:root:Starting episode 2...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 42
+INFO:root:# successes: 0 (0.0%)
+
+ 10%|█         | 2/20 [00:24<03:36, 12.01s/it][AINFO:root:
+Task: put the black bowl in the bottom drawer of the cabinet and close it
+INFO:root:Starting episode 3...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 43
+INFO:root:# successes: 0 (0.0%)
+
+ 15%|█▌        | 3/20 [00:36<03:25, 12.07s/it][AINFO:root:
+Task: put the black bowl in the bottom drawer of the cabinet and close it
+INFO:root:Starting episode 4...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 44
+INFO:root:# successes: 0 (0.0%)
+
+ 20%|██        | 4/20 [00:48<03:12, 12.02s/it][AINFO:root:
+Task: put the black bowl in the bottom drawer of the cabinet and close it
+INFO:root:Starting episode 5...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 45
+INFO:root:# successes: 0 (0.0%)
+
+ 25%|██▌       | 5/20 [01:00<03:00, 12.01s/it][AINFO:root:
+Task: put the black bowl in the bottom drawer of the cabinet and close it
+INFO:root:Starting episode 6...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 46
+INFO:root:# successes: 0 (0.0%)
+
+ 30%|███       | 6/20 [01:12<02:48, 12.06s/it][AINFO:root:
+Task: put the black bowl in the bottom drawer of the cabinet and close it
+INFO:root:Starting episode 7...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 47
+INFO:root:# successes: 0 (0.0%)
+
+ 35%|███▌      | 7/20 [01:25<02:42, 12.49s/it][AINFO:root:
+Task: put the black bowl in the bottom drawer of the cabinet and close it
+INFO:root:Starting episode 8...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 48
+INFO:root:# successes: 0 (0.0%)
+
+ 40%|████      | 8/20 [01:38<02:30, 12.55s/it][AINFO:root:
+Task: put the black bowl in the bottom drawer of the cabinet and close it
+INFO:root:Starting episode 9...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 49
+INFO:root:# successes: 0 (0.0%)
+
+ 45%|████▌     | 9/20 [01:51<02:18, 12.60s/it][AINFO:root:
+Task: put the black bowl in the bottom drawer of the cabinet and close it
+INFO:root:Starting episode 10...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 50
+INFO:root:# successes: 0 (0.0%)
+
+ 50%|█████     | 10/20 [02:03<02:04, 12.44s/it][AINFO:root:
+Task: put the black bowl in the bottom drawer of the cabinet and close it
+INFO:root:Starting episode 11...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 51
+INFO:root:# successes: 0 (0.0%)
+
+ 55%|█████▌    | 11/20 [02:16<01:55, 12.80s/it][AINFO:root:
+Task: put the black bowl in the bottom drawer of the cabinet and close it
+INFO:root:Starting episode 12...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 52
+INFO:root:# successes: 0 (0.0%)
+
+ 60%|██████    | 12/20 [02:28<01:40, 12.57s/it][AINFO:root:
+Task: put the black bowl in the bottom drawer of the cabinet and close it
+INFO:root:Starting episode 13...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 53
+INFO:root:# successes: 0 (0.0%)
+
+ 65%|██████▌   | 13/20 [02:41<01:28, 12.58s/it][AINFO:root:
+Task: put the black bowl in the bottom drawer of the cabinet and close it
+INFO:root:Starting episode 14...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 54
+INFO:root:# successes: 0 (0.0%)
+
+ 70%|███████   | 14/20 [02:53<01:15, 12.54s/it][AINFO:root:
+Task: put the black bowl in the bottom drawer of the cabinet and close it
+INFO:root:Starting episode 15...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 55
+INFO:root:# successes: 0 (0.0%)
+
+ 75%|███████▌  | 15/20 [03:06<01:02, 12.48s/it][AINFO:root:
+Task: put the black bowl in the bottom drawer of the cabinet and close it
+INFO:root:Starting episode 16...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 56
+INFO:root:# successes: 0 (0.0%)
+
+ 80%|████████  | 16/20 [03:18<00:50, 12.53s/it][AINFO:root:
+Task: put the black bowl in the bottom drawer of the cabinet and close it
+INFO:root:Starting episode 17...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 57
+INFO:root:# successes: 0 (0.0%)
+
+ 85%|████████▌ | 17/20 [03:31<00:37, 12.43s/it][AINFO:root:
+Task: put the black bowl in the bottom drawer of the cabinet and close it
+INFO:root:Starting episode 18...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 58
+INFO:root:# successes: 0 (0.0%)
+
+ 90%|█████████ | 18/20 [03:43<00:24, 12.32s/it][AINFO:root:
+Task: put the black bowl in the bottom drawer of the cabinet and close it
+INFO:root:Starting episode 19...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 59
+INFO:root:# successes: 0 (0.0%)
+
+ 95%|█████████▌| 19/20 [03:55<00:12, 12.23s/it][AINFO:root:
+Task: put the black bowl in the bottom drawer of the cabinet and close it
+INFO:root:Starting episode 20...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 60
+INFO:root:# successes: 0 (0.0%)
+
+100%|██████████| 20/20 [04:07<00:00, 12.37s/it][A100%|██████████| 20/20 [04:07<00:00, 12.39s/it]
+INFO:root:Current task success rate: 0.0
+INFO:root:Current total success rate: 0.0
+ 40%|████      | 4/10 [13:34<19:55, 199.28s/it]
+  0%|          | 0/20 [00:00<?, ?it/s][AINFO:root:
+Task: put the white mug on the left plate and put the yellow and white mug on the right plate
+INFO:root:Starting episode 1...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 61
+INFO:root:# successes: 0 (0.0%)
+
+  5%|▌         | 1/20 [00:13<04:24, 13.93s/it][AINFO:root:
+Task: put the white mug on the left plate and put the yellow and white mug on the right plate
+INFO:root:Starting episode 2...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 62
+INFO:root:# successes: 0 (0.0%)
+
+ 10%|█         | 2/20 [00:27<04:05, 13.65s/it][AINFO:root:
+Task: put the white mug on the left plate and put the yellow and white mug on the right plate
+INFO:root:Starting episode 3...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 63
+INFO:root:# successes: 0 (0.0%)
+
+ 15%|█▌        | 3/20 [00:40<03:49, 13.52s/it][AINFO:root:
+Task: put the white mug on the left plate and put the yellow and white mug on the right plate
+INFO:root:Starting episode 4...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 64
+INFO:root:# successes: 0 (0.0%)
+
+ 20%|██        | 4/20 [00:54<03:37, 13.60s/it][AINFO:root:
+Task: put the white mug on the left plate and put the yellow and white mug on the right plate
+INFO:root:Starting episode 5...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 65
+INFO:root:# successes: 0 (0.0%)
+
+ 25%|██▌       | 5/20 [01:07<03:21, 13.42s/it][AINFO:root:
+Task: put the white mug on the left plate and put the yellow and white mug on the right plate
+INFO:root:Starting episode 6...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 66
+INFO:root:# successes: 0 (0.0%)
+
+ 30%|███       | 6/20 [01:21<03:09, 13.52s/it][AINFO:root:
+Task: put the white mug on the left plate and put the yellow and white mug on the right plate
+INFO:root:Starting episode 7...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 67
+INFO:root:# successes: 0 (0.0%)
+
+ 35%|███▌      | 7/20 [01:35<02:59, 13.79s/it][AINFO:root:
+Task: put the white mug on the left plate and put the yellow and white mug on the right plate
+INFO:root:Starting episode 8...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 68
+INFO:root:# successes: 0 (0.0%)
+
+ 40%|████      | 8/20 [01:49<02:47, 13.94s/it][AINFO:root:
+Task: put the white mug on the left plate and put the yellow and white mug on the right plate
+INFO:root:Starting episode 9...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 69
+INFO:root:# successes: 0 (0.0%)
+
+ 45%|████▌     | 9/20 [02:02<02:29, 13.61s/it][AINFO:root:
+Task: put the white mug on the left plate and put the yellow and white mug on the right plate
+INFO:root:Starting episode 10...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 70
+INFO:root:# successes: 0 (0.0%)
+
+ 50%|█████     | 10/20 [02:16<02:16, 13.64s/it][AINFO:root:
+Task: put the white mug on the left plate and put the yellow and white mug on the right plate
+INFO:root:Starting episode 11...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 71
+INFO:root:# successes: 0 (0.0%)
+
+ 55%|█████▌    | 11/20 [02:29<02:02, 13.56s/it][AINFO:root:
+Task: put the white mug on the left plate and put the yellow and white mug on the right plate
+INFO:root:Starting episode 12...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 72
+INFO:root:# successes: 0 (0.0%)
+
+ 60%|██████    | 12/20 [02:42<01:47, 13.39s/it][AINFO:root:
+Task: put the white mug on the left plate and put the yellow and white mug on the right plate
+INFO:root:Starting episode 13...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 73
+INFO:root:# successes: 0 (0.0%)
+
+ 65%|██████▌   | 13/20 [02:56<01:34, 13.53s/it][AINFO:root:
+Task: put the white mug on the left plate and put the yellow and white mug on the right plate
+INFO:root:Starting episode 14...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 74
+INFO:root:# successes: 0 (0.0%)
+
+ 70%|███████   | 14/20 [03:10<01:21, 13.56s/it][AINFO:root:
+Task: put the white mug on the left plate and put the yellow and white mug on the right plate
+INFO:root:Starting episode 15...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 75
+INFO:root:# successes: 0 (0.0%)
+
+ 75%|███████▌  | 15/20 [03:23<01:07, 13.48s/it][AINFO:root:
+Task: put the white mug on the left plate and put the yellow and white mug on the right plate
+INFO:root:Starting episode 16...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 76
+INFO:root:# successes: 0 (0.0%)
+
+ 80%|████████  | 16/20 [03:37<00:54, 13.58s/it][AINFO:root:
+Task: put the white mug on the left plate and put the yellow and white mug on the right plate
+INFO:root:Starting episode 17...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 77
+INFO:root:# successes: 0 (0.0%)
+
+ 85%|████████▌ | 17/20 [03:50<00:40, 13.45s/it][AINFO:root:
+Task: put the white mug on the left plate and put the yellow and white mug on the right plate
+INFO:root:Starting episode 18...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 78
+INFO:root:# successes: 0 (0.0%)
+
+ 90%|█████████ | 18/20 [04:04<00:27, 13.63s/it][AINFO:root:
+Task: put the white mug on the left plate and put the yellow and white mug on the right plate
+INFO:root:Starting episode 19...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 79
+INFO:root:# successes: 0 (0.0%)
+
+ 95%|█████████▌| 19/20 [04:18<00:13, 13.55s/it][AINFO:root:
+Task: put the white mug on the left plate and put the yellow and white mug on the right plate
+INFO:root:Starting episode 20...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 80
+INFO:root:# successes: 0 (0.0%)
+
+100%|██████████| 20/20 [04:31<00:00, 13.49s/it][A100%|██████████| 20/20 [04:31<00:00, 13.57s/it]
+INFO:root:Current task success rate: 0.0
+INFO:root:Current total success rate: 0.0
+ 50%|█████     | 5/10 [18:08<18:39, 223.83s/it]
+  0%|          | 0/20 [00:00<?, ?it/s][AINFO:root:
+Task: pick up the book and place it in the back compartment of the caddy
+INFO:root:Starting episode 1...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 81
+INFO:root:# successes: 0 (0.0%)
+
+  5%|▌         | 1/20 [00:11<03:32, 11.20s/it][AINFO:root:
+Task: pick up the book and place it in the back compartment of the caddy
+INFO:root:Starting episode 2...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 82
+INFO:root:# successes: 0 (0.0%)
+
+ 10%|█         | 2/20 [00:22<03:22, 11.27s/it][AINFO:root:
+Task: pick up the book and place it in the back compartment of the caddy
+INFO:root:Starting episode 3...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 83
+INFO:root:# successes: 0 (0.0%)
+
+ 15%|█▌        | 3/20 [00:33<03:11, 11.29s/it][AINFO:root:
+Task: pick up the book and place it in the back compartment of the caddy
+INFO:root:Starting episode 4...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 84
+INFO:root:# successes: 0 (0.0%)
+
+ 20%|██        | 4/20 [00:45<03:00, 11.31s/it][AINFO:root:
+Task: pick up the book and place it in the back compartment of the caddy
+INFO:root:Starting episode 5...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 85
+INFO:root:# successes: 0 (0.0%)
+
+ 25%|██▌       | 5/20 [00:56<02:49, 11.29s/it][AINFO:root:
+Task: pick up the book and place it in the back compartment of the caddy
+INFO:root:Starting episode 6...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 86
+INFO:root:# successes: 0 (0.0%)
+
+ 30%|███       | 6/20 [01:08<02:39, 11.41s/it][AINFO:root:
+Task: pick up the book and place it in the back compartment of the caddy
+INFO:root:Starting episode 7...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 87
+INFO:root:# successes: 0 (0.0%)
+
+ 35%|███▌      | 7/20 [01:19<02:27, 11.34s/it][AINFO:root:
+Task: pick up the book and place it in the back compartment of the caddy
+INFO:root:Starting episode 8...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 88
+INFO:root:# successes: 0 (0.0%)
+
+ 40%|████      | 8/20 [01:30<02:16, 11.36s/it][AINFO:root:
+Task: pick up the book and place it in the back compartment of the caddy
+INFO:root:Starting episode 9...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 89
+INFO:root:# successes: 0 (0.0%)
+
+ 45%|████▌     | 9/20 [01:42<02:05, 11.43s/it][AINFO:root:
+Task: pick up the book and place it in the back compartment of the caddy
+INFO:root:Starting episode 10...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 90
+INFO:root:# successes: 0 (0.0%)
+
+ 50%|█████     | 10/20 [01:53<01:54, 11.44s/it][AINFO:root:
+Task: pick up the book and place it in the back compartment of the caddy
+INFO:root:Starting episode 11...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 91
+INFO:root:# successes: 0 (0.0%)
+
+ 55%|█████▌    | 11/20 [02:05<01:43, 11.46s/it][AINFO:root:
+Task: pick up the book and place it in the back compartment of the caddy
+INFO:root:Starting episode 12...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 92
+INFO:root:# successes: 0 (0.0%)
+
+ 60%|██████    | 12/20 [02:16<01:31, 11.40s/it][AINFO:root:
+Task: pick up the book and place it in the back compartment of the caddy
+INFO:root:Starting episode 13...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 93
+INFO:root:# successes: 0 (0.0%)
+
+ 65%|██████▌   | 13/20 [02:27<01:19, 11.41s/it][AINFO:root:
+Task: pick up the book and place it in the back compartment of the caddy
+INFO:root:Starting episode 14...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 94
+INFO:root:# successes: 0 (0.0%)
+
+ 70%|███████   | 14/20 [02:39<01:09, 11.55s/it][AINFO:root:
+Task: pick up the book and place it in the back compartment of the caddy
+INFO:root:Starting episode 15...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 95
+INFO:root:# successes: 0 (0.0%)
+
+ 75%|███████▌  | 15/20 [02:50<00:57, 11.44s/it][AINFO:root:
+Task: pick up the book and place it in the back compartment of the caddy
+INFO:root:Starting episode 16...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 96
+INFO:root:# successes: 0 (0.0%)
+
+ 80%|████████  | 16/20 [03:02<00:46, 11.55s/it][AINFO:root:
+Task: pick up the book and place it in the back compartment of the caddy
+INFO:root:Starting episode 17...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 97
+INFO:root:# successes: 0 (0.0%)
+
+ 85%|████████▌ | 17/20 [03:14<00:34, 11.49s/it][AINFO:root:
+Task: pick up the book and place it in the back compartment of the caddy
+INFO:root:Starting episode 18...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 98
+INFO:root:# successes: 0 (0.0%)
+
+ 90%|█████████ | 18/20 [03:25<00:22, 11.42s/it][AINFO:root:
+Task: pick up the book and place it in the back compartment of the caddy
+INFO:root:Starting episode 19...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 99
+INFO:root:# successes: 0 (0.0%)
+
+ 95%|█████████▌| 19/20 [03:36<00:11, 11.38s/it][AINFO:root:
+Task: pick up the book and place it in the back compartment of the caddy
+INFO:root:Starting episode 20...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 100
+INFO:root:# successes: 0 (0.0%)
+
+100%|██████████| 20/20 [03:47<00:00, 11.34s/it][A100%|██████████| 20/20 [03:47<00:00, 11.40s/it]
+INFO:root:Current task success rate: 0.0
+INFO:root:Current total success rate: 0.0
+ 60%|██████    | 6/10 [21:57<15:01, 225.47s/it]
+  0%|          | 0/20 [00:00<?, ?it/s][AINFO:root:
+Task: put the white mug on the plate and put the chocolate pudding to the right of the plate
+INFO:root:Starting episode 1...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 101
+INFO:root:# successes: 0 (0.0%)
+
+  5%|▌         | 1/20 [00:12<03:53, 12.29s/it][AINFO:root:
+Task: put the white mug on the plate and put the chocolate pudding to the right of the plate
+INFO:root:Starting episode 2...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 102
+INFO:root:# successes: 0 (0.0%)
+
+ 10%|█         | 2/20 [00:24<03:44, 12.46s/it][AINFO:root:
+Task: put the white mug on the plate and put the chocolate pudding to the right of the plate
+INFO:root:Starting episode 3...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 103
+INFO:root:# successes: 0 (0.0%)
+
+ 15%|█▌        | 3/20 [00:38<03:38, 12.86s/it][AINFO:root:
+Task: put the white mug on the plate and put the chocolate pudding to the right of the plate
+INFO:root:Starting episode 4...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 104
+INFO:root:# successes: 0 (0.0%)
+
+ 20%|██        | 4/20 [00:51<03:26, 12.91s/it][AINFO:root:
+Task: put the white mug on the plate and put the chocolate pudding to the right of the plate
+INFO:root:Starting episode 5...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 105
+INFO:root:# successes: 0 (0.0%)
+
+ 25%|██▌       | 5/20 [01:04<03:16, 13.10s/it][AINFO:root:
+Task: put the white mug on the plate and put the chocolate pudding to the right of the plate
+INFO:root:Starting episode 6...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 106
+INFO:root:# successes: 0 (0.0%)
+
+ 30%|███       | 6/20 [01:17<03:00, 12.93s/it][AINFO:root:
+Task: put the white mug on the plate and put the chocolate pudding to the right of the plate
+INFO:root:Starting episode 7...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 107
+INFO:root:# successes: 0 (0.0%)
+
+ 35%|███▌      | 7/20 [01:29<02:45, 12.77s/it][AINFO:root:
+Task: put the white mug on the plate and put the chocolate pudding to the right of the plate
+INFO:root:Starting episode 8...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 108
+INFO:root:# successes: 0 (0.0%)
+
+ 40%|████      | 8/20 [01:42<02:32, 12.72s/it][AINFO:root:
+Task: put the white mug on the plate and put the chocolate pudding to the right of the plate
+INFO:root:Starting episode 9...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 109
+INFO:root:# successes: 0 (0.0%)
+
+ 45%|████▌     | 9/20 [01:54<02:19, 12.69s/it][AINFO:root:
+Task: put the white mug on the plate and put the chocolate pudding to the right of the plate
+INFO:root:Starting episode 10...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 110
+INFO:root:# successes: 0 (0.0%)
+
+ 50%|█████     | 10/20 [02:07<02:05, 12.53s/it][AINFO:root:
+Task: put the white mug on the plate and put the chocolate pudding to the right of the plate
+INFO:root:Starting episode 11...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 111
+INFO:root:# successes: 0 (0.0%)
+
+ 55%|█████▌    | 11/20 [02:19<01:53, 12.63s/it][AINFO:root:
+Task: put the white mug on the plate and put the chocolate pudding to the right of the plate
+INFO:root:Starting episode 12...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 112
+INFO:root:# successes: 0 (0.0%)
+
+ 60%|██████    | 12/20 [02:32<01:40, 12.54s/it][AINFO:root:
+Task: put the white mug on the plate and put the chocolate pudding to the right of the plate
+INFO:root:Starting episode 13...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 113
+INFO:root:# successes: 0 (0.0%)
+
+ 65%|██████▌   | 13/20 [02:44<01:27, 12.49s/it][AINFO:root:
+Task: put the white mug on the plate and put the chocolate pudding to the right of the plate
+INFO:root:Starting episode 14...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 114
+INFO:root:# successes: 0 (0.0%)
+
+ 70%|███████   | 14/20 [02:58<01:16, 12.77s/it][AINFO:root:
+Task: put the white mug on the plate and put the chocolate pudding to the right of the plate
+INFO:root:Starting episode 15...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 115
+INFO:root:# successes: 0 (0.0%)
+
+ 75%|███████▌  | 15/20 [03:11<01:04, 12.83s/it][AINFO:root:
+Task: put the white mug on the plate and put the chocolate pudding to the right of the plate
+INFO:root:Starting episode 16...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 116
+INFO:root:# successes: 0 (0.0%)
+
+ 80%|████████  | 16/20 [03:23<00:51, 12.86s/it][AINFO:root:
+Task: put the white mug on the plate and put the chocolate pudding to the right of the plate
+INFO:root:Starting episode 17...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 117
+INFO:root:# successes: 0 (0.0%)
+
+ 85%|████████▌ | 17/20 [03:36<00:38, 12.70s/it][AINFO:root:
+Task: put the white mug on the plate and put the chocolate pudding to the right of the plate
+INFO:root:Starting episode 18...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 118
+INFO:root:# successes: 0 (0.0%)
+
+ 90%|█████████ | 18/20 [03:49<00:25, 12.85s/it][AINFO:root:
+Task: put the white mug on the plate and put the chocolate pudding to the right of the plate
+INFO:root:Starting episode 19...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 119
+INFO:root:# successes: 0 (0.0%)
+
+ 95%|█████████▌| 19/20 [04:02<00:12, 12.75s/it][AINFO:root:
+Task: put the white mug on the plate and put the chocolate pudding to the right of the plate
+INFO:root:Starting episode 20...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 120
+INFO:root:# successes: 0 (0.0%)
+
+100%|██████████| 20/20 [04:14<00:00, 12.61s/it][A100%|██████████| 20/20 [04:14<00:00, 12.71s/it]
+INFO:root:Current task success rate: 0.0
+INFO:root:Current total success rate: 0.0
+ 70%|███████   | 7/10 [26:12<11:44, 234.80s/it]
+  0%|          | 0/20 [00:00<?, ?it/s][AINFO:root:
+Task: put both the alphabet soup and the cream cheese box in the basket
+INFO:root:Starting episode 1...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 121
+INFO:root:# successes: 0 (0.0%)
+
+  5%|▌         | 1/20 [00:12<03:55, 12.38s/it][AINFO:root:
+Task: put both the alphabet soup and the cream cheese box in the basket
+INFO:root:Starting episode 2...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 122
+INFO:root:# successes: 0 (0.0%)
+
+ 10%|█         | 2/20 [00:24<03:41, 12.30s/it][AINFO:root:
+Task: put both the alphabet soup and the cream cheese box in the basket
+INFO:root:Starting episode 3...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 123
+INFO:root:# successes: 0 (0.0%)
+
+ 15%|█▌        | 3/20 [00:36<03:26, 12.17s/it][AINFO:root:
+Task: put both the alphabet soup and the cream cheese box in the basket
+INFO:root:Starting episode 4...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 124
+INFO:root:# successes: 0 (0.0%)
+
+ 20%|██        | 4/20 [00:48<03:14, 12.18s/it][AINFO:root:
+Task: put both the alphabet soup and the cream cheese box in the basket
+INFO:root:Starting episode 5...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 125
+INFO:root:# successes: 0 (0.0%)
+
+ 25%|██▌       | 5/20 [01:01<03:02, 12.19s/it][AINFO:root:
+Task: put both the alphabet soup and the cream cheese box in the basket
+INFO:root:Starting episode 6...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 126
+INFO:root:# successes: 0 (0.0%)
+
+ 30%|███       | 6/20 [01:13<02:50, 12.15s/it][AINFO:root:
+Task: put both the alphabet soup and the cream cheese box in the basket
+INFO:root:Starting episode 7...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 127
+INFO:root:# successes: 0 (0.0%)
+
+ 35%|███▌      | 7/20 [01:25<02:38, 12.21s/it][AINFO:root:
+Task: put both the alphabet soup and the cream cheese box in the basket
+INFO:root:Starting episode 8...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 128
+INFO:root:# successes: 0 (0.0%)
+
+ 40%|████      | 8/20 [01:37<02:27, 12.29s/it][AINFO:root:
+Task: put both the alphabet soup and the cream cheese box in the basket
+INFO:root:Starting episode 9...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 129
+INFO:root:# successes: 0 (0.0%)
+
+ 45%|████▌     | 9/20 [01:50<02:15, 12.30s/it][AINFO:root:
+Task: put both the alphabet soup and the cream cheese box in the basket
+INFO:root:Starting episode 10...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 130
+INFO:root:# successes: 0 (0.0%)
+
+ 50%|█████     | 10/20 [02:03<02:05, 12.53s/it][AINFO:root:
+Task: put both the alphabet soup and the cream cheese box in the basket
+INFO:root:Starting episode 11...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 131
+INFO:root:# successes: 0 (0.0%)
+
+ 55%|█████▌    | 11/20 [02:15<01:52, 12.55s/it][AINFO:root:
+Task: put both the alphabet soup and the cream cheese box in the basket
+INFO:root:Starting episode 12...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 132
+INFO:root:# successes: 0 (0.0%)
+
+ 60%|██████    | 12/20 [02:28<01:39, 12.45s/it][AINFO:root:
+Task: put both the alphabet soup and the cream cheese box in the basket
+INFO:root:Starting episode 13...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 133
+INFO:root:# successes: 0 (0.0%)
+
+ 65%|██████▌   | 13/20 [02:40<01:26, 12.43s/it][AINFO:root:
+Task: put both the alphabet soup and the cream cheese box in the basket
+INFO:root:Starting episode 14...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 134
+INFO:root:# successes: 0 (0.0%)
+
+ 70%|███████   | 14/20 [02:53<01:15, 12.61s/it][AINFO:root:
+Task: put both the alphabet soup and the cream cheese box in the basket
+INFO:root:Starting episode 15...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 135
+INFO:root:# successes: 0 (0.0%)
+
+ 75%|███████▌  | 15/20 [03:05<01:02, 12.50s/it][AINFO:root:
+Task: put both the alphabet soup and the cream cheese box in the basket
+INFO:root:Starting episode 16...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 136
+INFO:root:# successes: 0 (0.0%)
+
+ 80%|████████  | 16/20 [03:18<00:49, 12.46s/it][AINFO:root:
+Task: put both the alphabet soup and the cream cheese box in the basket
+INFO:root:Starting episode 17...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 137
+INFO:root:# successes: 0 (0.0%)
+
+ 85%|████████▌ | 17/20 [03:31<00:38, 12.75s/it][AINFO:root:
+Task: put both the alphabet soup and the cream cheese box in the basket
+INFO:root:Starting episode 18...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 138
+INFO:root:# successes: 0 (0.0%)
+
+ 90%|█████████ | 18/20 [03:43<00:25, 12.57s/it][AINFO:root:
+Task: put both the alphabet soup and the cream cheese box in the basket
+INFO:root:Starting episode 19...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 139
+INFO:root:# successes: 0 (0.0%)
+
+ 95%|█████████▌| 19/20 [03:56<00:12, 12.51s/it][AINFO:root:
+Task: put both the alphabet soup and the cream cheese box in the basket
+INFO:root:Starting episode 20...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 140
+INFO:root:# successes: 0 (0.0%)
+
+100%|██████████| 20/20 [04:08<00:00, 12.40s/it][A100%|██████████| 20/20 [04:08<00:00, 12.41s/it]
+INFO:root:Current task success rate: 0.0
+INFO:root:Current total success rate: 0.0
+ 80%|████████  | 8/10 [30:21<07:58, 239.18s/it]
+  0%|          | 0/20 [00:00<?, ?it/s][AINFO:root:
+Task: put both moka pots on the stove
+INFO:root:Starting episode 1...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 141
+INFO:root:# successes: 0 (0.0%)
+
+  5%|▌         | 1/20 [00:11<03:45, 11.86s/it][AINFO:root:
+Task: put both moka pots on the stove
+INFO:root:Starting episode 2...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 142
+INFO:root:# successes: 0 (0.0%)
+
+ 10%|█         | 2/20 [00:23<03:31, 11.74s/it][AINFO:root:
+Task: put both moka pots on the stove
+INFO:root:Starting episode 3...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 143
+INFO:root:# successes: 0 (0.0%)
+
+ 15%|█▌        | 3/20 [00:35<03:20, 11.82s/it][AINFO:root:
+Task: put both moka pots on the stove
+INFO:root:Starting episode 4...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 144
+INFO:root:# successes: 0 (0.0%)
+
+ 20%|██        | 4/20 [00:47<03:09, 11.84s/it][AINFO:root:
+Task: put both moka pots on the stove
+INFO:root:Starting episode 5...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 145
+INFO:root:# successes: 0 (0.0%)
+
+ 25%|██▌       | 5/20 [00:59<02:57, 11.86s/it][AINFO:root:
+Task: put both moka pots on the stove
+INFO:root:Starting episode 6...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 146
+INFO:root:# successes: 0 (0.0%)
+
+ 30%|███       | 6/20 [01:11<02:47, 11.94s/it][AINFO:root:
+Task: put both moka pots on the stove
+INFO:root:Starting episode 7...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 147
+INFO:root:# successes: 0 (0.0%)
+
+ 35%|███▌      | 7/20 [01:22<02:33, 11.84s/it][AINFO:root:
+Task: put both moka pots on the stove
+INFO:root:Starting episode 8...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 148
+INFO:root:# successes: 0 (0.0%)
+
+ 40%|████      | 8/20 [01:34<02:21, 11.81s/it][AINFO:root:
+Task: put both moka pots on the stove
+INFO:root:Starting episode 9...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 149
+INFO:root:# successes: 0 (0.0%)
+
+ 45%|████▌     | 9/20 [01:46<02:09, 11.78s/it][AINFO:root:
+Task: put both moka pots on the stove
+INFO:root:Starting episode 10...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 150
+INFO:root:# successes: 0 (0.0%)
+
+ 50%|█████     | 10/20 [01:58<01:57, 11.79s/it][AINFO:root:
+Task: put both moka pots on the stove
+INFO:root:Starting episode 11...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 151
+INFO:root:# successes: 0 (0.0%)
+
+ 55%|█████▌    | 11/20 [02:10<01:46, 11.86s/it][AINFO:root:
+Task: put both moka pots on the stove
+INFO:root:Starting episode 12...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 152
+INFO:root:# successes: 0 (0.0%)
+
+ 60%|██████    | 12/20 [02:22<01:35, 12.00s/it][AINFO:root:
+Task: put both moka pots on the stove
+INFO:root:Starting episode 13...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 153
+INFO:root:# successes: 0 (0.0%)
+
+ 65%|██████▌   | 13/20 [02:34<01:23, 11.94s/it][AINFO:root:
+Task: put both moka pots on the stove
+INFO:root:Starting episode 14...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 154
+INFO:root:# successes: 0 (0.0%)
+
+ 70%|███████   | 14/20 [02:46<01:12, 12.01s/it][AINFO:root:
+Task: put both moka pots on the stove
+INFO:root:Starting episode 15...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 155
+INFO:root:# successes: 0 (0.0%)
+
+ 75%|███████▌  | 15/20 [02:58<00:59, 11.93s/it][AINFO:root:
+Task: put both moka pots on the stove
+INFO:root:Starting episode 16...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 156
+INFO:root:# successes: 0 (0.0%)
+
+ 80%|████████  | 16/20 [03:10<00:47, 11.99s/it][AINFO:root:
+Task: put both moka pots on the stove
+INFO:root:Starting episode 17...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 157
+INFO:root:# successes: 0 (0.0%)
+
+ 85%|████████▌ | 17/20 [03:22<00:35, 11.93s/it][AINFO:root:
+Task: put both moka pots on the stove
+INFO:root:Starting episode 18...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 158
+INFO:root:# successes: 0 (0.0%)
+
+ 90%|█████████ | 18/20 [03:34<00:23, 11.95s/it][AINFO:root:
+Task: put both moka pots on the stove
+INFO:root:Starting episode 19...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 159
+INFO:root:# successes: 0 (0.0%)
+
+ 95%|█████████▌| 19/20 [03:46<00:12, 12.02s/it][AINFO:root:
+Task: put both moka pots on the stove
+INFO:root:Starting episode 20...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 160
+INFO:root:# successes: 0 (0.0%)
+
+100%|██████████| 20/20 [03:58<00:00, 11.92s/it][A100%|██████████| 20/20 [03:58<00:00, 11.90s/it]
+INFO:root:Current task success rate: 0.0
+INFO:root:Current total success rate: 0.0
+ 90%|█████████ | 9/10 [34:19<03:58, 238.97s/it]
+  0%|          | 0/20 [00:00<?, ?it/s][AINFO:root:
+Task: put the yellow and white mug in the microwave and close it
+INFO:root:Starting episode 1...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 161
+INFO:root:# successes: 0 (0.0%)
+
+  5%|▌         | 1/20 [00:12<03:51, 12.19s/it][AINFO:root:
+Task: put the yellow and white mug in the microwave and close it
+INFO:root:Starting episode 2...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 162
+INFO:root:# successes: 0 (0.0%)
+
+ 10%|█         | 2/20 [00:24<03:37, 12.11s/it][AINFO:root:
+Task: put the yellow and white mug in the microwave and close it
+INFO:root:Starting episode 3...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 163
+INFO:root:# successes: 0 (0.0%)
+
+ 15%|█▌        | 3/20 [00:36<03:25, 12.12s/it][AINFO:root:
+Task: put the yellow and white mug in the microwave and close it
+INFO:root:Starting episode 4...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 164
+INFO:root:# successes: 0 (0.0%)
+
+ 20%|██        | 4/20 [00:48<03:13, 12.12s/it][AINFO:root:
+Task: put the yellow and white mug in the microwave and close it
+INFO:root:Starting episode 5...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 165
+INFO:root:# successes: 0 (0.0%)
+
+ 25%|██▌       | 5/20 [01:00<03:02, 12.15s/it][AINFO:root:
+Task: put the yellow and white mug in the microwave and close it
+INFO:root:Starting episode 6...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 166
+INFO:root:# successes: 0 (0.0%)
+
+ 30%|███       | 6/20 [01:12<02:50, 12.18s/it][AINFO:root:
+Task: put the yellow and white mug in the microwave and close it
+INFO:root:Starting episode 7...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 167
+INFO:root:# successes: 0 (0.0%)
+
+ 35%|███▌      | 7/20 [01:24<02:37, 12.14s/it][AINFO:root:
+Task: put the yellow and white mug in the microwave and close it
+INFO:root:Starting episode 8...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 168
+INFO:root:# successes: 0 (0.0%)
+
+ 40%|████      | 8/20 [01:37<02:25, 12.13s/it][AINFO:root:
+Task: put the yellow and white mug in the microwave and close it
+INFO:root:Starting episode 9...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 169
+INFO:root:# successes: 0 (0.0%)
+
+ 45%|████▌     | 9/20 [01:49<02:14, 12.19s/it][AINFO:root:
+Task: put the yellow and white mug in the microwave and close it
+INFO:root:Starting episode 10...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 170
+INFO:root:# successes: 0 (0.0%)
+
+ 50%|█████     | 10/20 [02:01<02:01, 12.17s/it][AINFO:root:
+Task: put the yellow and white mug in the microwave and close it
+INFO:root:Starting episode 11...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 171
+INFO:root:# successes: 0 (0.0%)
+
+ 55%|█████▌    | 11/20 [02:13<01:49, 12.17s/it][AINFO:root:
+Task: put the yellow and white mug in the microwave and close it
+INFO:root:Starting episode 12...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 172
+INFO:root:# successes: 0 (0.0%)
+
+ 60%|██████    | 12/20 [02:25<01:36, 12.09s/it][AINFO:root:
+Task: put the yellow and white mug in the microwave and close it
+INFO:root:Starting episode 13...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 173
+INFO:root:# successes: 0 (0.0%)
+
+ 65%|██████▌   | 13/20 [02:37<01:24, 12.08s/it][AINFO:root:
+Task: put the yellow and white mug in the microwave and close it
+INFO:root:Starting episode 14...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 174
+INFO:root:# successes: 0 (0.0%)
+
+ 70%|███████   | 14/20 [02:49<01:12, 12.02s/it][AINFO:root:
+Task: put the yellow and white mug in the microwave and close it
+INFO:root:Starting episode 15...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 175
+INFO:root:# successes: 0 (0.0%)
+
+ 75%|███████▌  | 15/20 [03:01<01:00, 12.02s/it][AINFO:root:
+Task: put the yellow and white mug in the microwave and close it
+INFO:root:Starting episode 16...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 176
+INFO:root:# successes: 0 (0.0%)
+
+ 80%|████████  | 16/20 [03:13<00:48, 12.09s/it][AINFO:root:
+Task: put the yellow and white mug in the microwave and close it
+INFO:root:Starting episode 17...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 177
+INFO:root:# successes: 0 (0.0%)
+
+ 85%|████████▌ | 17/20 [03:26<00:36, 12.20s/it][AINFO:root:
+Task: put the yellow and white mug in the microwave and close it
+INFO:root:Starting episode 18...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 178
+INFO:root:# successes: 0 (0.0%)
+
+ 90%|█████████ | 18/20 [03:38<00:24, 12.16s/it][AINFO:root:
+Task: put the yellow and white mug in the microwave and close it
+INFO:root:Starting episode 19...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 179
+INFO:root:# successes: 0 (0.0%)
+
+ 95%|█████████▌| 19/20 [03:50<00:12, 12.17s/it][AINFO:root:
+Task: put the yellow and white mug in the microwave and close it
+INFO:root:Starting episode 20...
+INFO:root:Success: False
+INFO:root:# episodes completed so far: 180
+INFO:root:# successes: 0 (0.0%)
+
+100%|██████████| 20/20 [04:02<00:00, 12.13s/it][A100%|██████████| 20/20 [04:02<00:00, 12.13s/it]
+INFO:root:Current task success rate: 0.0
+INFO:root:Current total success rate: 0.0
+100%|██████████| 10/10 [38:22<00:00, 240.27s/it]100%|██████████| 10/10 [38:22<00:00, 230.30s/it]
+INFO:root:Total success rate: 0.0
+INFO:root:Total episodes: 180
+INFO:root:Results saved to: data/libero/horizon_100/results.csv
+INFO:root:Summary results saved to: data/libero/horizon_100/results_summary.csv
+slurmstepd: error: *** JOB 1860579 ON gundam CANCELLED AT 2025-10-28T23:10:22 ***

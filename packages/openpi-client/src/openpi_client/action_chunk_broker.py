@@ -20,7 +20,7 @@ class ActionChunkBroker(_base_policy.BasePolicy):
     list of chunks is exhausted.
     """
 
-    def __init__(self, policy: _base_policy.BasePolicy, action_horizon: int, is_rtc: bool = False):
+    def __init__(self, policy: _base_policy.BasePolicy, action_horizon: int, is_rtc: bool = False, s: int = 12, d: int = 5):
         self._policy = policy
 
         self._action_horizon = action_horizon
@@ -32,11 +32,11 @@ class ActionChunkBroker(_base_policy.BasePolicy):
         self._background_running: bool = False
 
         self._obs: Dict[str, np.ndarray] | None = None
-        self._s = 5 # 25
-        self._d = 3 # 10
+        self._s = s # 25
+        self._d = d # 10
         self._is_rtc = is_rtc
         # self._norm_stats = json.loads(pathlib.Path("/srv/rl2-lab/flash8/rbansal66/openpi/.cache/openpi/openpi-assets/checkpoints/pi05_libero/assets/physical-intelligence/libero/norm_stats.json").read_text())["norm_stats"]
-
+        print(f"initialized with s: {s}, d: {d}")
         if self._is_rtc:
             self._infer_thread = threading.Thread(target=self._background_infer)
             self._infer_thread.start()
@@ -45,7 +45,8 @@ class ActionChunkBroker(_base_policy.BasePolicy):
         while True:
             if self._cur_step == self._s:
                 self._background_running = True
-                self._background_results = self._policy.infer(self._obs, self._last_origin_actions, self._is_rtc
+                self._background_results = self._policy.infer(self._obs, self._last_origin_actions, self._is_rtc, 
+                s_param=self._s, d_param=self._d
                 )
                 self._background_running = False
             else:
@@ -56,7 +57,7 @@ class ActionChunkBroker(_base_policy.BasePolicy):
         if self._is_rtc:
             # init
             if self._last_results is None:
-                self._last_results = self._policy.infer(obs, None, self._is_rtc)
+                self._last_results = self._policy.infer(obs, None, self._is_rtc, s_param=self._s, d_param=self._d)
                 self._last_origin_actions = self._last_results["origin_actions"]
                 self._last_state = self._last_results["state"]
                 self._last_results = {"actions": self._last_results["actions"]}
@@ -79,7 +80,7 @@ class ActionChunkBroker(_base_policy.BasePolicy):
 
         else:
             if self._last_results is None:
-                self._last_results = self._policy.infer(obs)
+                self._last_results = self._policy.infer(obs, s_param=self._s, d_param=self._d)
                 self._cur_step = 0
 
             self._last_results = {"actions": self._last_results["actions"]}
@@ -96,4 +97,6 @@ class ActionChunkBroker(_base_policy.BasePolicy):
     def reset(self) -> None:
         self._policy.reset()
         self._last_results = None
+        self._last_origin_actions = None
+        self._background_results = None
         self._cur_step = 0

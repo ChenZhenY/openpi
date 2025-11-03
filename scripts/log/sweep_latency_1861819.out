@@ -1,0 +1,17 @@
+======================================
+Job ID: 1861819
+Running with args.latency=200
+Running with args.use_rtc=True
+======================================
+Starting background process for horizon  (default): serve_policy.py --env=LIBERO
+Background process started with PID: 575054
+Running libero client...
+here
+here
+1
+2
+3
+imported checkpoints
+[info] using task orders [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+initialized with s: 5, d: 4
+RTC setting:  True action horizon:  10 s:  5 d:  4

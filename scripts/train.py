@@ -1,4 +1,3 @@
-print("hi")
 import dataclasses
 import functools
 import logging
@@ -6,7 +5,6 @@ import platform
 from typing import Any
 
 
-print("hi")
 import etils.epath as epath
 import flax.nnx as nnx
 from flax.training import common_utils
@@ -19,27 +17,16 @@ import optax
 import tqdm_loggable.auto as tqdm
 import wandb
 
-print("hi")
 import openpi.models.model as _model
-print("1")
 import openpi.shared.array_typing as at
-print("2")
 import openpi.shared.nnx_utils as nnx_utils
-print("3")
 import openpi.training.checkpoints as _checkpoints
-print("4")
 import openpi.training.config as _config
-print("5")
 import openpi.training.data_loader as _data_loader
-print("6")
 import openpi.training.optimizer as _optimizer
-print("7")
 import openpi.training.sharding as sharding
-print("8")
 import openpi.training.utils as training_utils
-print("9")
 import openpi.training.weight_loaders as _weight_loaders
-print("10")
 
 
 def init_logging():

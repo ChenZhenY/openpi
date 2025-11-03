@@ -286,7 +286,7 @@ class Pi0(_model.BaseModel):
         *,
         num_steps: int | at.Int[at.Array, ""] = 10,       
         s: int = 5,
-        d: int = 3,
+        d: int = 4,
         beta: float = 8.0,
     ) -> _model.Actions:
         observation = _model.preprocess_observation(None, observation, train=False)

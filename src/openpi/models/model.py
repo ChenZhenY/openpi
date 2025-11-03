@@ -17,15 +17,9 @@ import orbax.checkpoint as ocp
 import safetensors
 import torch
 
-print("models hi")
-
 from openpi.models_pytorch import pi0_pytorch
-print("1")
 from openpi.shared import image_tools
-print("2")
 import openpi.shared.array_typing as at
-print("3")
-print("imported model")
 logger = logging.getLogger("openpi")
 
 # Type variable for array types (JAX arrays, PyTorch tensors, or numpy arrays)

@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 from typing import Dict, Optional, Tuple
 
@@ -16,12 +17,14 @@ class WebsocketClientPolicy(_base_policy.BasePolicy):
     See WebsocketPolicyServer for a corresponding server implementation.
     """
 
-    def __init__(self, host: str = "0.0.0.0", port: Optional[int] = None, api_key: Optional[str] = None) -> None:
+    def __init__(self, host: str = "0.0.0.0", port: Optional[int] = None, api_key: Optional[str] = None, latency_ms: float = 0.0) -> None:
         self._uri = f"ws://{host}"
         if port is not None:
             self._uri += f":{port}"
         self._packer = msgpack_numpy.Packer()
         self._api_key = api_key
+        self._latency_ms = latency_ms
+        self._ws_lock = threading.Lock()  # Thread-safe WebSocket access
         self._ws, self._server_metadata = self._wait_for_server()
 
     def get_server_metadata(self) -> Dict:
@@ -42,15 +45,26 @@ class WebsocketClientPolicy(_base_policy.BasePolicy):
                 time.sleep(5)
 
     @override
-    def infer(self, obs: Dict, prev_action: Optional[np.ndarray] = None, use_rtc: bool = True) -> Dict:  # noqa: UP006
+    def infer(self, obs: Dict, prev_action: Optional[np.ndarray] = None, use_rtc: bool = True, s_param: int = 5, d_param: int = 4) -> Dict:  # noqa: UP006
         data = {
             "observation": obs,
             "prev_action": prev_action,
             "use_rtc": use_rtc,
+            "s_param": s_param,
+            "d_param": d_param,
         }
         data = self._packer.pack(data)
-        self._ws.send(data)
-        response = self._ws.recv()
+
+        # Inject artificial latency if specified
+        if self._latency_ms > 0:
+            time.sleep(self._latency_ms / 1000.0)
+        
+        # Use lock to ensure thread-safe WebSocket communication
+        with self._ws_lock:
+            self._ws.send(data)
+            response = self._ws.recv()
+        
+            
         if isinstance(response, str):
             # we're expecting bytes; if the server sends a string, it's an error.
             raise RuntimeError(f"Error in inference server:\n{response}")
