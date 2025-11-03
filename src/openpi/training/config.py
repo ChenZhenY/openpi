@@ -783,6 +783,30 @@ _CONFIGS = [
         ema_decay=None,
     ),
     TrainConfig(
+        name="pi05_liberogoal_filtered_bc_lora",
+        # model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=10, paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora"),
+        data=LeRobotLiberoDataConfig(
+            repo_id="libero", # NOTE: using pre converted libero_90 dataset
+            # repo_id="lerobot_filtered_bc_libero_goal_8tasks_1022", # NOTE: using pre converted libero_90 dataset
+            base_config=DataConfig(prompt_from_task=True),
+            extra_delta_transform=False,
+            # assets=AssetsConfig(
+            #     assets_dir="/home/hice1/zchen927/scratch/openpi/assets/pi05_libero/physical-intelligence",
+            #     asset_id="libero",
+            # ),
+        ),
+
+        num_train_steps=30_000,
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_libero/params"), # NOTE: using pi05_libero base model
+
+        freeze_filter=pi0_config.Pi0Config(
+            paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora"
+        ).get_freeze_filter(),
+        # Turn off EMA for LoRA finetuning.
+        ema_decay=None,
+    ),
+    TrainConfig(
         name="pi0_fast_libero",
         # Here is an example of loading a pi0-FAST model for full finetuning.
         # Modify action_dim and action_horizon to match your dataset (action horizon is equal to
@@ -936,7 +960,6 @@ _CONFIGS = [
             #     asset_id="libero",
             # ),
         ),
-
         batch_size=256,
         num_train_steps=30_000,
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_libero/params"), # NOTE: using pi05_libero base model

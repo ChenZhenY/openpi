@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, List
 
 from typing_extensions import override
 import websockets.sync.client
@@ -49,6 +49,17 @@ class WebsocketClientPolicy(_base_policy.BasePolicy):
             # we're expecting bytes; if the server sends a string, it's an error.
             raise RuntimeError(f"Error in inference server:\n{response}")
         return msgpack_numpy.unpackb(response)
+
+    def infer_batch(self, obs_batch: List[Dict]) -> List[Dict]:  # noqa: UP006
+        data = self._packer.pack(obs_batch)
+        self._ws.send(data)
+        response = self._ws.recv()
+        if isinstance(response, str):
+            raise RuntimeError(f"Error in inference server:\n{response}")
+        result = msgpack_numpy.unpackb(response)
+        if not isinstance(result, list):
+            raise RuntimeError("Server returned non-list for batch request")
+        return result
 
     @override
     def reset(self) -> None:

@@ -221,3 +221,17 @@ class PolicyRecorder(_base_policy.BasePolicy):
 
         np.save(output_path, np.asarray(data))
         return results
+
+    def infer_batch(self, obs_batch: list[dict]) -> list[dict]:  # type: ignore[misc]
+        results = self._policy.infer_batch(obs_batch)
+
+        # Record each item in the batch sequentially to maintain step ordering
+        for obs, res in zip(obs_batch, results):
+            data = {"inputs": obs, "outputs": res}
+            data = flax.traverse_util.flatten_dict(data, sep="/")
+
+            output_path = self._record_dir / f"step_{self._record_step}"
+            self._record_step += 1
+            np.save(output_path, np.asarray(data))
+
+        return results

@@ -49,7 +49,12 @@ class WebsocketPolicyServer:
         logger.info(f"Connection from {websocket.remote_address} opened")
         packer = msgpack_numpy.Packer()
 
-        await websocket.send(packer.pack(self._metadata))
+        # Advertise supported methods in metadata
+        metadata = dict(self._metadata)
+        existing_methods = set(metadata.get("methods", []))
+        existing_methods.update({"infer", "infer_batch"})
+        metadata["methods"] = sorted(existing_methods)
+        await websocket.send(packer.pack(metadata))
 
         prev_total_time = None
         while True:
@@ -58,15 +63,31 @@ class WebsocketPolicyServer:
                 obs = msgpack_numpy.unpackb(await websocket.recv())
 
                 infer_time = time.monotonic()
-                action = self._policy.infer(obs)
+                # Support batch inference if a list of observations is received.
+                if isinstance(obs, list):
+                    action = self._policy.infer_batch(obs)
+                else:
+                    action = self._policy.infer(obs)
                 infer_time = time.monotonic() - infer_time
 
-                action["server_timing"] = {
-                    "infer_ms": infer_time * 1000,
-                }
+                # Attach timing. For batch responses, attach timing to each item.
+                if isinstance(action, list):
+                    for a in action:
+                        if isinstance(a, dict):
+                            a.setdefault("server_timing", {})["infer_ms"] = infer_time * 1000
+                            if prev_total_time is not None:
+                                a["server_timing"]["prev_total_ms"] = prev_total_time * 1000
+                else:
+                    action["server_timing"] = {
+                        "infer_ms": infer_time * 1000,
+                    }
                 if prev_total_time is not None:
                     # We can only record the last total time since we also want to include the send time.
-                    action["server_timing"]["prev_total_ms"] = prev_total_time * 1000
+                    if isinstance(action, list):
+                        # already added above per-item
+                        pass
+                    else:
+                        action["server_timing"]["prev_total_ms"] = prev_total_time * 1000
 
                 await websocket.send(packer.pack(action))
                 prev_total_time = time.monotonic() - start_time

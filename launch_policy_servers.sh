@@ -2,11 +2,15 @@
 
 # Launch policy servers on GPUs 0-7 for EIC GPUs!
 # Each server will run on a different GPU and port
+# Example:
+# ./launch_policy_servers.sh start --checkpoint /research/data/zhenyang/openpi/checkpoints/liberogoal_filtered_bc_lora_4k pi05_liberogoal_filtered_bc_lora
 
 # Configuration
 BASE_PORT=8000
 ENV_MODE="LIBERO"
 LOG_DIR="policy_logs"
+CHECKPOINT_DIR=""
+CONFIG_NAME=""
 
 # Create log directory if it doesn't exist
 mkdir -p "$LOG_DIR"
@@ -20,12 +24,26 @@ launch_server() {
     echo "Launching policy server on GPU $gpu_id, port $port..."
     echo "Log file: $log_file"
     
-    # Launch the server in background with GPU assignment
-    CUDA_VISIBLE_DEVICES=$gpu_id \
-    uv run scripts/serve_policy.py \
-        --env $ENV_MODE \
-        --port $port \
-        > "$log_file" 2>&1 &
+    # Build the command based on whether checkpoint is provided
+    if [ -n "$CHECKPOINT_DIR" ] && [ -n "$CONFIG_NAME" ]; then
+        echo "Using checkpoint: $CHECKPOINT_DIR with config: $CONFIG_NAME"
+        # Launch the server in background with GPU assignment and checkpoint
+        CUDA_VISIBLE_DEVICES=$gpu_id \
+        uv run scripts/serve_policy.py \
+            --port $port \
+            policy:checkpoint \
+            --policy.config=$CONFIG_NAME \
+            --policy.dir=$CHECKPOINT_DIR \
+            > "$log_file" 2>&1 &
+    else
+        echo "Using default policy for environment: $ENV_MODE"
+        # Launch the server in background with GPU assignment (default behavior)
+        CUDA_VISIBLE_DEVICES=$gpu_id \
+        uv run scripts/serve_policy.py \
+            --env $ENV_MODE \
+            --port $port \
+            > "$log_file" 2>&1 &
+    fi
     
     # Store the PID
     local pid=$!
@@ -91,8 +109,17 @@ check_status() {
 # Handle command line arguments
 case "${1:-start}" in
     "start")
-        echo "Starting policy servers on GPUs 0-7..."
-        echo "Environment: $ENV_MODE"
+        # Parse additional arguments for checkpoint
+        if [ "$2" = "--checkpoint" ] && [ -n "$3" ] && [ -n "$4" ]; then
+            CHECKPOINT_DIR="$3"
+            CONFIG_NAME="$4"
+            echo "Starting policy servers on GPUs 0-7 with checkpoint..."
+            echo "Checkpoint directory: $CHECKPOINT_DIR"
+            echo "Config name: $CONFIG_NAME"
+        else
+            echo "Starting policy servers on GPUs 0-7..."
+            echo "Environment: $ENV_MODE"
+        fi
         echo "Base port: $BASE_PORT"
         echo "Log directory: $LOG_DIR"
         echo ""
@@ -116,16 +143,28 @@ case "${1:-start}" in
     "restart")
         stop_servers
         sleep 2
-        $0 start
+        # Pass through checkpoint arguments if provided
+        if [ "$2" = "--checkpoint" ] && [ -n "$3" ] && [ -n "$4" ]; then
+            $0 start --checkpoint "$3" "$4"
+        else
+            $0 start
+        fi
         ;;
     *)
-        echo "Usage: $0 {start|stop|status|restart}"
+        echo "Usage: $0 {start|stop|status|restart} [--checkpoint <checkpoint_dir> <config_name>]"
         echo ""
         echo "Commands:"
         echo "  start   - Launch policy servers on GPUs 0-7 (default)"
         echo "  stop    - Stop all running policy servers"
         echo "  status  - Check status of all servers"
         echo "  restart - Stop and restart all servers"
+        echo ""
+        echo "Options:"
+        echo "  --checkpoint <checkpoint_dir> <config_name> - Use specific checkpoint instead of default policy"
+        echo ""
+        echo "Examples:"
+        echo "  $0 start  # Use default LIBERO policy"
+        echo "  $0 start --checkpoint /path/to/checkpoint pi05_liberogoal_filtered_bc_lora"
         echo ""
         echo "Server configuration:"
         echo "  Environment: $ENV_MODE"
