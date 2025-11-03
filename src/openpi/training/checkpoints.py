@@ -6,24 +6,15 @@ import dataclasses
 import logging
 from typing import Protocol
 
-print("here")
-
 from etils import epath
 import jax
 import orbax.checkpoint as ocp
 import orbax.checkpoint.future as future
 
-print("here")
-
 from openpi.shared import array_typing as at
-print("1")
 import openpi.shared.normalize as _normalize
-print("2")
 import openpi.training.data_loader as _data_loader
-print("3")
 import openpi.training.utils as training_utils
-
-print("imported checkpoints")
 
 
 def initialize_checkpoint_dir(

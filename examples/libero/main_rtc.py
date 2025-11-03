@@ -27,7 +27,7 @@ class Args:
     # Model server parameters
     #################################################################################################################
     host: str = "0.0.0.0"
-    port: int = 8080
+    port: int = 8081
     resize_size: int = 224
     action_horizon: int = 25  # Action horizon for ActionChunkBroker (matches Libero model config)
     latency_ms: float = 0.0  # Artificial latency to inject during inference (in milliseconds)
@@ -49,7 +49,7 @@ class Args:
 
     seed: int = 18  # Random Seed (for reproducibility)
 
-    use_rtc: bool = False
+    use_rtc: bool = True
 
 
 def eval_libero(args: Args) -> None:
