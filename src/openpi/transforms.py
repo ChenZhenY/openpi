@@ -5,6 +5,7 @@ from typing import Protocol, TypeAlias, TypeVar, runtime_checkable
 
 import flax.traverse_util as traverse_util
 import jax
+import jax.numpy as jnp
 import numpy as np
 from openpi_client import image_tools
 
@@ -259,10 +260,33 @@ class TokenizePrompt(DataTransformFn):
         else:
             state = None
 
-        if not isinstance(prompt, str):
-            prompt = prompt.item()
-
-        tokens, token_masks = self.tokenizer.tokenize(prompt, state)
+        # Handle both single prompts and batch of prompts
+        if isinstance(prompt, list):
+            # Batch processing: tokenize each prompt in the batch
+            batch_tokens = []
+            batch_masks = []
+            
+            for i, single_prompt in enumerate(prompt):
+                if not isinstance(single_prompt, str):
+                    single_prompt = single_prompt.item()
+                
+                # Get state for this sample if needed
+                sample_state = state[i] if state is not None and len(state.shape) > 1 else state
+                
+                tokens, token_masks = self.tokenizer.tokenize(single_prompt, sample_state)
+                batch_tokens.append(tokens)
+                batch_masks.append(token_masks)
+            
+            # Stack into batch format
+            tokens = jnp.stack(batch_tokens, axis=0)
+            token_masks = jnp.stack(batch_masks, axis=0)
+        else:
+            # Single prompt processing (original behavior)
+            if not isinstance(prompt, str):
+                prompt = prompt.item()
+            
+            tokens, token_masks = self.tokenizer.tokenize(prompt, state)
+        
         return {**data, "tokenized_prompt": tokens, "tokenized_prompt_mask": token_masks}
 
 
@@ -274,11 +298,46 @@ class TokenizeFASTInputs(DataTransformFn):
         if (prompt := data.pop("prompt", None)) is None:
             raise ValueError("Prompt is required")
 
-        if not isinstance(prompt, str):
-            prompt = prompt.item()
+        # Handle both single prompts and batch of prompts
+        if isinstance(prompt, list):
+            # Batch processing: tokenize each prompt in the batch
+            batch_tokens = []
+            batch_token_masks = []
+            batch_ar_masks = []
+            batch_loss_masks = []
+            
+            state = data["state"]
+            actions = data.get("actions")
+            
+            for i, single_prompt in enumerate(prompt):
+                if not isinstance(single_prompt, str):
+                    single_prompt = single_prompt.item()
+                
+                # Get state and actions for this sample
+                sample_state = state[i] if len(state.shape) > 1 else state
+                sample_actions = actions[i] if actions is not None and len(actions.shape) > 1 else actions
+                
+                tokens, token_mask, ar_mask, loss_mask = self.tokenizer.tokenize(
+                    single_prompt, sample_state, sample_actions
+                )
+                batch_tokens.append(tokens)
+                batch_token_masks.append(token_mask)
+                batch_ar_masks.append(ar_mask)
+                batch_loss_masks.append(loss_mask)
+            
+            # Stack into batch format
+            tokens = jnp.stack(batch_tokens, axis=0)
+            token_mask = jnp.stack(batch_token_masks, axis=0)
+            ar_mask = jnp.stack(batch_ar_masks, axis=0)
+            loss_mask = jnp.stack(batch_loss_masks, axis=0)
+        else:
+            # Single prompt processing (original behavior)
+            if not isinstance(prompt, str):
+                prompt = prompt.item()
 
-        state, actions = data["state"], data.get("actions")
-        tokens, token_mask, ar_mask, loss_mask = self.tokenizer.tokenize(prompt, state, actions)
+            state, actions = data["state"], data.get("actions")
+            tokens, token_mask, ar_mask, loss_mask = self.tokenizer.tokenize(prompt, state, actions)
+        
         return {
             **data,
             "tokenized_prompt": tokens,
@@ -334,6 +393,73 @@ class PadStatesAndActions(DataTransformFn):
         data["state"] = pad_to_dim(data["state"], self.model_action_dim, axis=-1)
         if "actions" in data:
             data["actions"] = pad_to_dim(data["actions"], self.model_action_dim, axis=-1)
+        return data
+
+
+@dataclasses.dataclass(frozen=True)
+class ReplacePromptWithReasoning(DataTransformFn):
+    """
+    Replaces the original task prompt with randomly selected reasoning components 
+    ('subtask' or 'movement') from the reasoning data.
+    Only applies during training (when 'actions' key is present in data).
+    """
+
+    mapping_file_path: str
+    reasoning_file_path: str
+    reasoning_components: list[str] = dataclasses.field(default_factory=lambda: ["subtask", "movement"])
+
+    def __post_init__(self):
+        # Use object.__setattr__ to bypass frozen dataclass restriction
+        import json
+        
+        with open(self.mapping_file_path, 'r') as f:
+            mapping_data = json.load(f)
+            object.__setattr__(self, '_mapping', mapping_data['mapping'])
+        
+        with open(self.reasoning_file_path, 'r') as f:
+            reasoning_data = json.load(f)
+            object.__setattr__(self, '_reasoning_data', reasoning_data)
+
+    def __call__(self, data: DataDict) -> DataDict:
+        import random
+
+        # Only apply reasoning replacement during training (when actions are present)
+        # During inference, actions are not present, so we keep the original prompt
+        if "actions" not in data:
+            return data
+
+        # Extract episode index and frame index from LeRobot data
+        episode_idx = int(data.get('episode_index', 0))
+        frame_idx = int(data.get('frame_index', 0))
+        
+        # Store original prompt as fallback
+        original_prompt = data.get('prompt', '')
+
+        data['prompt'] = np.asarray(original_prompt)
+        # data['reasoning_component_used'] = np.asarray('original')
+        
+        # Look up reasoning data using mapping
+        if str(episode_idx) in self._mapping:
+            mapping_info = self._mapping[str(episode_idx)]
+            task_key = mapping_info['reasonings_task_key']
+            episode_id = mapping_info['reasonings_episode_id']
+            
+            if task_key in self._reasoning_data:
+                reasoning_step = self._reasoning_data[task_key][f"{episode_id}"][f"{frame_idx}"]
+                
+                # Randomly select a reasoning component
+                available_components = ['original']  # Always include original as option
+                for component in self.reasoning_components:
+                    if component in reasoning_step and reasoning_step[component]:
+                        available_components.append(component)
+                
+                if available_components:
+                    selected_component = random.choice(available_components)
+                    if selected_component != 'original':
+                        new_prompt = reasoning_step[selected_component]
+                        data['prompt'] = np.asarray(new_prompt)
+                        # data['reasoning_component_used'] = np.asarray(selected_component)
+        
         return data
 
 
