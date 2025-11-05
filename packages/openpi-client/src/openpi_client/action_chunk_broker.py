@@ -80,7 +80,7 @@ class ActionChunkBroker(_base_policy.BasePolicy):
 
         else:
             if self._last_results is None:
-                self._last_results = self._policy.infer(obs, s_param=self._s, d_param=self._d)
+                self._last_results = self._policy.infer(obs, use_rtc=self._is_rtc, s_param=self._s, d_param=self._d)
                 self._cur_step = 0
 
             self._last_results = {"actions": self._last_results["actions"]}

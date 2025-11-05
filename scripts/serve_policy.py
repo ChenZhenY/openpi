@@ -19,6 +19,7 @@ class EnvMode(enum.Enum):
     ALOHA_SIM = "aloha_sim"
     DROID = "droid"
     LIBERO = "libero"
+    LIBERO_REALTIME = "libero_realtime"
 
 
 @dataclasses.dataclass
@@ -77,6 +78,10 @@ DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
         config="pi05_libero",
         dir="gs://openpi-assets/checkpoints/pi05_libero",
     ),
+    EnvMode.LIBERO_REALTIME: Checkpoint(
+        config="pi0_libero",
+        dir="/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/.cache/openpi/openpi-assets/checkpoints/pi0_libero_pytorch_dexmal",
+    ),
 }
 
 
@@ -90,6 +95,7 @@ def create_default_policy(
             checkpoint.dir,
             default_prompt=default_prompt,
             sample_kwargs=sample_kwargs,
+            use_triton_optimized=(env == EnvMode.LIBERO_REALTIME),
         )
     raise ValueError(f"Unsupported environment mode: {env}")
 
