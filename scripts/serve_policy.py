@@ -71,6 +71,10 @@ DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
         config="pi05_libero",
         dir="gs://openpi-assets/checkpoints/pi05_libero",
     ),
+    EnvMode.LIBERO_REALTIME: Checkpoint(
+        config="pi0_libero",
+        dir="/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/.cache/openpi/openpi-assets/checkpoints/pi0_libero_pytorch_dexmal",
+    ),
 }
 
 
@@ -84,6 +88,7 @@ def create_default_policy(
             checkpoint.dir,
             default_prompt=default_prompt,
             sample_kwargs=sample_kwargs,
+            use_triton_optimized=(env == EnvMode.LIBERO_REALTIME),
         )
     raise ValueError(f"Unsupported environment mode: {env}")
 
@@ -97,6 +102,7 @@ def create_policy(args: Args) -> _policy.Policy:
                 args.policy.dir,
                 default_prompt=args.default_prompt,
                 sample_kwargs={"num_steps": args.num_steps},
+                use_triton_optimized=(args.env == EnvMode.LIBERO_REALTIME),
             )
         case Default():
             return create_default_policy(

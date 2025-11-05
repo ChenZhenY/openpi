@@ -22,6 +22,8 @@ def create_trained_policy(
     default_prompt: str | None = None,
     norm_stats: dict[str, transforms.NormStats] | None = None,
     pytorch_device: str | None = None,
+    use_triton_optimized: bool = False,  # NEW PARAMETER
+    num_views: int = 2,  # NEW PARAMETER
 ) -> _policy.Policy:
     """Create a policy from a trained checkpoint.
 
@@ -50,11 +52,31 @@ def create_trained_policy(
     is_pytorch = os.path.exists(weight_path)
 
     logging.info("Loading model...")
-    if is_pytorch:
+
+    if use_triton_optimized:
+        # Load the Triton-optimized model
+        from openpi.models import pi0_triton
+        converted_checkpoint_path = os.path.join(checkpoint_dir, "converted_checkpoint.pkl")
+        if not os.path.exists(converted_checkpoint_path):
+            raise ValueError(
+                f"Converted checkpoint not found at {converted_checkpoint_path}. "
+                "Please run convert_from_jax.py first."
+            )
+        model = pi0_triton.Pi0Triton.from_converted_checkpoint(
+            train_config.model, converted_checkpoint_path, num_views
+        )
+        is_pytorch = True
+    elif os.path.exists(os.path.join(checkpoint_dir, "model.safetensors")):
+        # Standard PyTorch model
+        weight_path = os.path.join(checkpoint_dir, "model.safetensors")
         model = train_config.model.load_pytorch(train_config, weight_path)
         model.paligemma_with_expert.to_bfloat16_for_selected_params("bfloat16")
+        is_pytorch = True
     else:
+        # JAX model
         model = train_config.model.load(_model.restore_params(checkpoint_dir / "params", dtype=jnp.bfloat16))
+        is_pytorch = False
+        
     data_config = train_config.data.create(train_config.assets_dirs, train_config.model)
     if norm_stats is None:
         # We are loading the norm stats from the checkpoint instead of the config assets dir to make sure
