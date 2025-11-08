@@ -12,21 +12,21 @@ def convert_weights(weights, dump_weights):
     # vision encoder weights
     weights["vision_patch_embedding_w"].copy_(
         torch.tensor(
-            dump_weights["PaliGemma"]["img"]["embedding"]["kernel"]["value"],
+            dump_weights["PaliGemma"]["img"]["embedding"]["kernel"],
             dtype=torch.bfloat16,
             device="cpu",
         )
     )
     weights["vision_patch_embedding_b"].copy_(
         torch.tensor(
-            dump_weights["PaliGemma"]["img"]["embedding"]["bias"]["value"],
+            dump_weights["PaliGemma"]["img"]["embedding"]["bias"],
             dtype=torch.bfloat16,
             device="cpu",
         )
     )
     weights["vision_position_embedding"].copy_(
         torch.tensor(
-            dump_weights["PaliGemma"]["img"]["pos_embedding"]["value"],
+            dump_weights["PaliGemma"]["img"]["pos_embedding"],
             dtype=torch.bfloat16,
             device="cpu",
         ).squeeze()
@@ -37,21 +37,21 @@ def convert_weights(weights, dump_weights):
             torch.tensor(
                 dump_weights["PaliGemma"]["img"]["Transformer"]["encoderblock"][
                     "MultiHeadDotProductAttention_0"
-                ]["query"]["kernel"]["value"],
+                ]["query"]["kernel"],
                 dtype=torch.bfloat16,
                 device="cpu",
             ).flatten(2),
             torch.tensor(
                 dump_weights["PaliGemma"]["img"]["Transformer"]["encoderblock"][
                     "MultiHeadDotProductAttention_0"
-                ]["key"]["kernel"]["value"],
+                ]["key"]["kernel"],
                 dtype=torch.bfloat16,
                 device="cpu",
             ).flatten(2),
             torch.tensor(
                 dump_weights["PaliGemma"]["img"]["Transformer"]["encoderblock"][
                     "MultiHeadDotProductAttention_0"
-                ]["value"]["kernel"]["value"],
+                ]["value"]["kernel"],
                 dtype=torch.bfloat16,
                 device="cpu",
             ).flatten(2),
@@ -64,21 +64,21 @@ def convert_weights(weights, dump_weights):
             torch.tensor(
                 dump_weights["PaliGemma"]["img"]["Transformer"]["encoderblock"][
                     "MultiHeadDotProductAttention_0"
-                ]["query"]["bias"]["value"],
+                ]["query"]["bias"],
                 dtype=torch.bfloat16,
                 device="cpu",
             ).flatten(1),
             torch.tensor(
                 dump_weights["PaliGemma"]["img"]["Transformer"]["encoderblock"][
                     "MultiHeadDotProductAttention_0"
-                ]["key"]["bias"]["value"],
+                ]["key"]["bias"],
                 dtype=torch.bfloat16,
                 device="cpu",
             ).flatten(1),
             torch.tensor(
                 dump_weights["PaliGemma"]["img"]["Transformer"]["encoderblock"][
                     "MultiHeadDotProductAttention_0"
-                ]["value"]["bias"]["value"],
+                ]["value"]["bias"],
                 dtype=torch.bfloat16,
                 device="cpu",
             ).flatten(1),
@@ -90,7 +90,7 @@ def convert_weights(weights, dump_weights):
         torch.tensor(
             dump_weights["PaliGemma"]["img"]["Transformer"]["encoderblock"][
                 "MultiHeadDotProductAttention_0"
-            ]["out"]["kernel"]["value"],
+            ]["out"]["kernel"],
             dtype=torch.bfloat16,
             device="cpu",
         ).flatten(1, -2)
@@ -99,7 +99,7 @@ def convert_weights(weights, dump_weights):
         torch.tensor(
             dump_weights["PaliGemma"]["img"]["Transformer"]["encoderblock"][
                 "MultiHeadDotProductAttention_0"
-            ]["out"]["bias"]["value"],
+            ]["out"]["bias"],
             dtype=torch.bfloat16,
             device="cpu",
         ).flatten(1)
@@ -109,7 +109,7 @@ def convert_weights(weights, dump_weights):
         torch.tensor(
             dump_weights["PaliGemma"]["img"]["Transformer"]["encoderblock"][
                 "MlpBlock_0"
-            ]["Dense_0"]["kernel"]["value"],
+            ]["Dense_0"]["kernel"],
             dtype=torch.bfloat16,
             device="cpu",
         )
@@ -118,7 +118,7 @@ def convert_weights(weights, dump_weights):
         torch.tensor(
             dump_weights["PaliGemma"]["img"]["Transformer"]["encoderblock"][
                 "MlpBlock_0"
-            ]["Dense_0"]["bias"]["value"],
+            ]["Dense_0"]["bias"],
             dtype=torch.bfloat16,
             device="cpu",
         )
@@ -127,7 +127,7 @@ def convert_weights(weights, dump_weights):
         torch.tensor(
             dump_weights["PaliGemma"]["img"]["Transformer"]["encoderblock"][
                 "MlpBlock_0"
-            ]["Dense_1"]["kernel"]["value"],
+            ]["Dense_1"]["kernel"],
             dtype=torch.bfloat16,
             device="cpu",
         )
@@ -136,7 +136,7 @@ def convert_weights(weights, dump_weights):
         torch.tensor(
             dump_weights["PaliGemma"]["img"]["Transformer"]["encoderblock"][
                 "MlpBlock_0"
-            ]["Dense_1"]["bias"]["value"],
+            ]["Dense_1"]["bias"],
             dtype=torch.bfloat16,
             device="cpu",
         )
@@ -146,7 +146,7 @@ def convert_weights(weights, dump_weights):
         torch.tensor(
             dump_weights["PaliGemma"]["img"]["Transformer"]["encoderblock"][
                 "LayerNorm_0"
-            ]["scale"]["value"],
+            ]["scale"],
             dtype=torch.bfloat16,
             device="cpu",
         )
@@ -155,7 +155,7 @@ def convert_weights(weights, dump_weights):
         torch.tensor(
             dump_weights["PaliGemma"]["img"]["Transformer"]["encoderblock"][
                 "LayerNorm_0"
-            ]["bias"]["value"],
+            ]["bias"],
             dtype=torch.bfloat16,
             device="cpu",
         )
@@ -164,7 +164,7 @@ def convert_weights(weights, dump_weights):
         torch.tensor(
             dump_weights["PaliGemma"]["img"]["Transformer"]["encoderblock"][
                 "LayerNorm_1"
-            ]["scale"]["value"],
+            ]["scale"],
             dtype=torch.bfloat16,
             device="cpu",
         )
@@ -173,25 +173,21 @@ def convert_weights(weights, dump_weights):
         torch.tensor(
             dump_weights["PaliGemma"]["img"]["Transformer"]["encoderblock"][
                 "LayerNorm_1"
-            ]["bias"]["value"],
+            ]["bias"],
             dtype=torch.bfloat16,
             device="cpu",
         )
     )
     weights["vision_final_norm_w"].copy_(
         torch.tensor(
-            dump_weights["PaliGemma"]["img"]["Transformer"]["encoder_norm"]["scale"][
-                "value"
-            ],
+            dump_weights["PaliGemma"]["img"]["Transformer"]["encoder_norm"]["scale"],
             dtype=torch.bfloat16,
             device="cpu",
         )
     )
     weights["vision_final_norm_b"].copy_(
         torch.tensor(
-            dump_weights["PaliGemma"]["img"]["Transformer"]["encoder_norm"]["bias"][
-                "value"
-            ],
+            dump_weights["PaliGemma"]["img"]["Transformer"]["encoder_norm"]["bias"],
             dtype=torch.bfloat16,
             device="cpu",
         )
@@ -200,30 +196,30 @@ def convert_weights(weights, dump_weights):
     # encoder weights
     weights["encoder_multi_modal_projector_w"].copy_(
         torch.tensor(
-            dump_weights["PaliGemma"]["img"]["head"]["kernel"]["value"],
+            dump_weights["PaliGemma"]["img"]["head"]["kernel"],
             dtype=torch.bfloat16,
             device="cpu",
         )
     )
     weights["encoder_multi_modal_projector_b"].copy_(
         torch.tensor(
-            dump_weights["PaliGemma"]["img"]["head"]["bias"]["value"],
+            dump_weights["PaliGemma"]["img"]["head"]["bias"],
             dtype=torch.bfloat16,
             device="cpu",
         )
     )
-    w_scale = dump_weights["PaliGemma"]["llm"]["layers"]["pre_attention_norm"]["scale"][
-        "value"
+    w_scale = dump_weights["PaliGemma"]["llm"]["layers"]["pre_attention_norm"][
+        "scale"
     ].astype("float32")
 
-    w_q = dump_weights["PaliGemma"]["llm"]["layers"]["attn"]["q_einsum"]["w"][
-        "value"
-    ].astype("float32")
+    w_q = dump_weights["PaliGemma"]["llm"]["layers"]["attn"]["q_einsum"]["w"].astype(
+        "float32"
+    )
     w_q = w_q.transpose((0, 2, 1, 3)).reshape((18, 2048, 8 * 256))
-    w_k = dump_weights["PaliGemma"]["llm"]["layers"]["attn"]["kv_einsum"]["w"]["value"][
+    w_k = dump_weights["PaliGemma"]["llm"]["layers"]["attn"]["kv_einsum"]["w"][
         :, 0, 0
     ].astype("float32")
-    w_v = dump_weights["PaliGemma"]["llm"]["layers"]["attn"]["kv_einsum"]["w"]["value"][
+    w_v = dump_weights["PaliGemma"]["llm"]["layers"]["attn"]["kv_einsum"]["w"][
         :, 1, 0
     ].astype("float32")
     w_q *= 1 + w_scale[:, :, None]
@@ -242,9 +238,7 @@ def convert_weights(weights, dump_weights):
         np.concatenate([w_q, w_k, w_v], axis=2), dtype=torch.bfloat16, device="cpu"
     )
     w_attn_o = (
-        dump_weights["PaliGemma"]["llm"]["layers"]["attn"]["attn_vec_einsum"]["w"][
-            "value"
-        ]
+        dump_weights["PaliGemma"]["llm"]["layers"]["attn"]["attn_vec_einsum"]["w"]
         .reshape((18, 8 * 256, 2048))
         .astype("float32")
     )
@@ -252,18 +246,18 @@ def convert_weights(weights, dump_weights):
         w_attn_o, dtype=torch.bfloat16, device="cpu"
     )
 
-    rms_norm = dump_weights["PaliGemma"]["llm"]["layers"]["pre_ffw_norm"]["scale"][
-        "value"
+    rms_norm = dump_weights["PaliGemma"]["llm"]["layers"]["pre_ffw_norm"][
+        "scale"
     ].astype("float32")
     w_gate = dump_weights["PaliGemma"]["llm"]["layers"]["mlp"]["gating_einsum"][
-        "value"
-    ][:, 0].astype("float32")
-    w_up = dump_weights["PaliGemma"]["llm"]["layers"]["mlp"]["gating_einsum"]["value"][
+        :, 0
+    ].astype("float32")
+    w_up = dump_weights["PaliGemma"]["llm"]["layers"]["mlp"]["gating_einsum"][
         :, 1
     ].astype("float32")
-    w_down = dump_weights["PaliGemma"]["llm"]["layers"]["mlp"]["linear"][
-        "value"
-    ].astype("float32")
+    w_down = dump_weights["PaliGemma"]["llm"]["layers"]["mlp"]["linear"].astype(
+        "float32"
+    )
     w_gate *= 1 + rms_norm[:, :, None]
     w_up *= 1 + rms_norm[:, :, None]
 
@@ -278,18 +272,18 @@ def convert_weights(weights, dump_weights):
     # decoder weights
     w_scale = dump_weights["PaliGemma"]["llm"]["layers"]["pre_attention_norm_1"][
         "scale"
-    ]["value"].astype("float32")
-
-    w_q = dump_weights["PaliGemma"]["llm"]["layers"]["attn"]["q_einsum_1"]["w"][
-        "value"
     ].astype("float32")
+
+    w_q = dump_weights["PaliGemma"]["llm"]["layers"]["attn"]["q_einsum_1"]["w"].astype(
+        "float32"
+    )
     w_q = w_q.transpose((0, 2, 1, 3)).reshape((18, 1024, 8 * 256))
     w_k = dump_weights["PaliGemma"]["llm"]["layers"]["attn"]["kv_einsum_1"]["w"][
-        "value"
-    ][:, 0, 0].astype("float32")
+        :, 0, 0
+    ].astype("float32")
     w_v = dump_weights["PaliGemma"]["llm"]["layers"]["attn"]["kv_einsum_1"]["w"][
-        "value"
-    ][:, 1, 0].astype("float32")
+        :, 1, 0
+    ].astype("float32")
     w_q *= 1 + w_scale[:, :, None]
     w_k *= 1 + w_scale[:, :, None]
     w_v *= 1 + w_scale[:, :, None]
@@ -306,9 +300,7 @@ def convert_weights(weights, dump_weights):
     )
 
     w_attn_o = (
-        dump_weights["PaliGemma"]["llm"]["layers"]["attn"]["attn_vec_einsum_1"]["w"][
-            "value"
-        ]
+        dump_weights["PaliGemma"]["llm"]["layers"]["attn"]["attn_vec_einsum_1"]["w"]
         .reshape((18, 8 * 256, 1024))
         .astype("float32")
     )
@@ -316,18 +308,18 @@ def convert_weights(weights, dump_weights):
         w_attn_o, dtype=torch.bfloat16, device="cpu"
     )
 
-    rms_norm = dump_weights["PaliGemma"]["llm"]["layers"]["pre_ffw_norm_1"]["scale"][
-        "value"
+    rms_norm = dump_weights["PaliGemma"]["llm"]["layers"]["pre_ffw_norm_1"][
+        "scale"
     ].astype("float32")
     w_gate = dump_weights["PaliGemma"]["llm"]["layers"]["mlp_1"]["gating_einsum"][
-        "value"
-    ][:, 0].astype("float32")
-    w_up = dump_weights["PaliGemma"]["llm"]["layers"]["mlp_1"]["gating_einsum"][
-        "value"
-    ][:, 1].astype("float32")
-    w_down = dump_weights["PaliGemma"]["llm"]["layers"]["mlp_1"]["linear"][
-        "value"
+        :, 0
     ].astype("float32")
+    w_up = dump_weights["PaliGemma"]["llm"]["layers"]["mlp_1"]["gating_einsum"][
+        :, 1
+    ].astype("float32")
+    w_down = dump_weights["PaliGemma"]["llm"]["layers"]["mlp_1"]["linear"].astype(
+        "float32"
+    )
     w_gate *= 1 + rms_norm[:, :, None]
     w_up *= 1 + rms_norm[:, :, None]
     weights["decoder_ffn_gate_w"] = torch.tensor(
@@ -340,14 +332,14 @@ def convert_weights(weights, dump_weights):
 
     weights["decoder_state_in_proj_w"].copy_(
         torch.tensor(
-            dump_weights["state_proj"]["kernel"]["value"],
+            dump_weights["state_proj"]["kernel"],
             dtype=torch.bfloat16,
             device="cpu",
         )
     )
     weights["decoder_state_in_proj_b"].copy_(
         torch.tensor(
-            dump_weights["state_proj"]["bias"]["value"],
+            dump_weights["state_proj"]["bias"],
             dtype=torch.bfloat16,
             device="cpu",
         )
@@ -370,42 +362,42 @@ def convert_weights(weights, dump_weights):
 
     n_decode_steps = 10
     mlp_in_weight_action = torch.tensor(
-        dump_weights["action_time_mlp_in"]["kernel"]["value"][:1024, :],
+        dump_weights["action_time_mlp_in"]["kernel"][:1024, :],
         dtype=torch.bfloat16,
         device="cpu",
     )
     mlp_in_weight_time = torch.tensor(
-        dump_weights["action_time_mlp_in"]["kernel"]["value"][1024:, :],
+        dump_weights["action_time_mlp_in"]["kernel"][1024:, :],
         dtype=torch.bfloat16,
         device="cpu",
     )
     action_time_mlp_in_b = torch.tensor(
-        dump_weights["action_time_mlp_in"]["bias"]["value"],
+        dump_weights["action_time_mlp_in"]["bias"],
         dtype=torch.bfloat16,
         device="cpu",
     )
     action_in_proj_w = torch.tensor(
-        dump_weights["action_in_proj"]["kernel"]["value"],
+        dump_weights["action_in_proj"]["kernel"],
         dtype=torch.bfloat16,
         device="cpu",
     )
     action_in_proj_b = torch.tensor(
-        dump_weights["action_in_proj"]["bias"]["value"],
+        dump_weights["action_in_proj"]["bias"],
         dtype=torch.bfloat16,
         device="cpu",
     )
     decoder_action_fused_out_proj_w = torch.tensor(
-        dump_weights["action_out_proj"]["kernel"]["value"],
+        dump_weights["action_out_proj"]["kernel"],
         dtype=torch.bfloat16,
         device="cpu",
     )
     decoder_action_fused_out_proj_b = torch.tensor(
-        dump_weights["action_out_proj"]["bias"]["value"],
+        dump_weights["action_out_proj"]["bias"],
         dtype=torch.bfloat16,
         device="cpu",
     )
     final_norm_scale = torch.tensor(
-        dump_weights["PaliGemma"]["llm"]["final_norm_1"]["scale"]["value"],
+        dump_weights["PaliGemma"]["llm"]["final_norm_1"]["scale"],
         dtype=torch.bfloat16,
         device="cpu",
     )
@@ -429,14 +421,14 @@ def convert_weights(weights, dump_weights):
 
     weights["decoder_action_mlp_w"].copy_(
         torch.tensor(
-            dump_weights["action_time_mlp_out"]["kernel"]["value"],
+            dump_weights["action_time_mlp_out"]["kernel"],
             dtype=torch.bfloat16,
             device="cpu",
         )
     )
     weights["decoder_action_mlp_b"].copy_(
         torch.tensor(
-            dump_weights["action_time_mlp_out"]["bias"]["value"],
+            dump_weights["action_time_mlp_out"]["bias"],
             dtype=torch.bfloat16,
             device="cpu",
         )
@@ -521,9 +513,7 @@ if __name__ == "__main__":
 
     num_views = 2
     dump_weights = load_jax_weights(args.jax_path)
-    embedding_weight = dump_weights["PaliGemma"]["llm"]["embedder"]["input_embedding"][
-        "value"
-    ]
+    embedding_weight = dump_weights["PaliGemma"]["llm"]["embedder"]["input_embedding"]
     language_embeds, prompt_len = prepare_prompt(
         args.prompt, embedding_weight, args.tokenizer_path
     )
