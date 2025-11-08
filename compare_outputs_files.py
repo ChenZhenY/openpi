@@ -1,3 +1,6 @@
+"""
+python compare_outputs_files.py --files output_bs1.pt output_bs2.pt output_bs4.pt
+"""
 import torch
 import argparse
 

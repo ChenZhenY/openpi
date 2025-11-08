@@ -1,3 +1,6 @@
+'''
+python save_output.py --batch_size 4 --output_file output_bs4.pt
+'''
 import torch
 from pi0_infer import Pi0Inference
 import numpy as np
