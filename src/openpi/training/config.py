@@ -64,6 +64,12 @@ class AssetsConfig:
 class DataConfig:
     # LeRobot repo id. If None, fake data will be created.
     repo_id: str | None = None
+    # For cotraining: list of repo_ids. If provided, repo_id is ignored.
+    # All datasets will share the same transforms and normalization stats.
+    repo_ids: Sequence[str] | None = None
+    # Sampling weights for each dataset in repo_ids. If provided, must have same length as repo_ids.
+    # Weights are normalized automatically. If None, uniform sampling is used.
+    dataset_weights: Sequence[float] | None = None
     # Directory within the assets directory containing the data assets.
     asset_id: str | None = None
     # Contains precomputed normalization stats. If None, normalization will not be performed.
@@ -348,6 +354,124 @@ class LeRobotLiberoDataConfig(DataConfigFactory):
         # We return all data transforms for training and inference. No need to change anything here.
         return dataclasses.replace(
             self.create_base_config(assets_dirs, model_config),
+            repack_transforms=repack_transform,
+            data_transforms=data_transforms,
+            model_transforms=model_transforms,
+        )
+
+
+@dataclasses.dataclass(frozen=True)
+class MultiDatasetLiberoDataConfig(DataConfigFactory):
+    """
+    Data config factory for cotraining on multiple Libero datasets.
+    
+    All datasets will share the same transforms and normalization stats (specified by asset_id).
+    Each dataset will have its own prompt handling if prompt_from_task is True.
+    """
+
+    # List of repo_ids for cotraining. If provided, repo_id is ignored.
+    repo_ids: Sequence[str] = tyro.MISSING
+    # Override repo_id to be optional since we use repo_ids instead
+    repo_id: str | None = None  # type: ignore[assignment]
+    # Sampling weights for each dataset. If provided, must have same length as repo_ids.
+    # Weights are normalized automatically. If None, uniform sampling is used.
+    # Example: [2.0, 1.0] means dataset 0 is sampled twice as often as dataset 1.
+    dataset_weights: Sequence[float] | None = None
+    extra_delta_transform: bool = False
+
+    def create_base_config(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        """Override to handle multi-dataset case where we don't have a single repo_id."""
+        # Use asset_id from assets config, or use first repo_id as fallback
+        asset_id = self.assets.asset_id
+        if asset_id is None and self.repo_ids is not tyro.MISSING and len(self.repo_ids) > 0:
+            asset_id = self.repo_ids[0]
+        
+        return dataclasses.replace(
+            self.base_config or DataConfig(),
+            repo_id=None,  # Will be set to None for multi-dataset mode
+            asset_id=asset_id,
+            norm_stats=self._load_norm_stats(epath.Path(self.assets.assets_dir or assets_dirs), asset_id),
+            use_quantile_norm=model_config.model_type != ModelType.PI0,
+        )
+
+    @override
+    def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        # The repack transform is *only* applied to the data coming from the dataset,
+        # and *not* during inference. We can use it to make inputs from the dataset look
+        # as close as possible to those coming from the inference environment (e.g. match the keys).
+        # Below, we match the keys in the dataset (which we defined in the data conversion script) to
+        # the keys we use in our inference pipeline (defined in the inference script for libero).
+        # For your own dataset, first figure out what keys your environment passes to the policy server
+        # and then modify the mappings below so your dataset's keys get matched to those target keys.
+        # The repack transform simply remaps key names here.
+        repack_transform = _transforms.Group(
+            inputs=[
+                _transforms.RepackTransform(
+                    {
+                        "observation/image": "image",
+                        "observation/wrist_image": "wrist_image",
+                        "observation/state": "state",
+                        "actions": "actions",
+                        "prompt": "prompt",
+                    }
+                )
+            ]
+        )
+
+        # The data transforms are applied to the data coming from the dataset *and* during inference.
+        # Below, we define the transforms for data going into the model (``inputs``) and the transforms
+        # for data coming out of the model (``outputs``) (the latter is only used during inference).
+        # We defined these transforms in `libero_policy.py`. You can check the detailed comments there for
+        # how to modify the transforms to match your dataset. Once you created your own transforms, you can
+        # replace the transforms below with your own.
+        data_transforms = _transforms.Group(
+            inputs=[libero_policy.LiberoInputs(model_type=model_config.model_type)],
+            outputs=[libero_policy.LiberoOutputs()],
+        )
+
+        # One additional data transform: pi0 models are trained on delta actions (relative to the first
+        # state in each action chunk). IF your data has ``absolute`` actions (e.g. target joint angles)
+        # you can uncomment the following line to convert the actions to delta actions. The only exception
+        # is for the gripper actions which are always absolute.
+        # In the example below, we would apply the delta conversion to the first 6 actions (joints) and
+        # leave the 7th action (gripper) unchanged, i.e. absolute.
+        # In Libero, the raw actions in the dataset are already delta actions, so we *do not* need to
+        # apply a separate delta conversion (that's why it's commented out). Choose whether to apply this
+        # transform based on whether your dataset uses ``absolute`` or ``delta`` actions out of the box.
+
+        # LIBERO already represents actions as deltas, but we have some old Pi0 checkpoints that are trained with this
+        # extra delta transform.
+        if self.extra_delta_transform:
+            delta_action_mask = _transforms.make_bool_mask(6, -1)
+            data_transforms = data_transforms.push(
+                inputs=[_transforms.DeltaActions(delta_action_mask)],
+                outputs=[_transforms.AbsoluteActions(delta_action_mask)],
+            )
+
+        # Model transforms include things like tokenizing the prompt and action targets
+        # You do not need to change anything here for your own dataset.
+        model_transforms = ModelTransformFactory()(model_config)
+
+        # Create base config with shared normalization stats (from asset_id)
+        base_config = self.create_base_config(assets_dirs, model_config)
+        
+        # Validate dataset_weights if provided
+        if self.dataset_weights is not None:
+            if len(self.dataset_weights) != len(self.repo_ids):
+                raise ValueError(
+                    f"dataset_weights length ({len(self.dataset_weights)}) must match "
+                    f"repo_ids length ({len(self.repo_ids)})"
+                )
+            if any(w < 0 for w in self.dataset_weights):
+                raise ValueError("dataset_weights must be non-negative")
+        
+        # We return all data transforms for training and inference.
+        # Set repo_ids and clear repo_id to use multi-dataset mode.
+        return dataclasses.replace(
+            base_config,
+            repo_id=None,  # Clear single repo_id
+            repo_ids=self.repo_ids,  # Set multiple repo_ids
+            dataset_weights=self.dataset_weights,  # Store dataset weights
             repack_transforms=repack_transform,
             data_transforms=data_transforms,
             model_transforms=model_transforms,
@@ -933,7 +1057,7 @@ _CONFIGS = [
             ),
         ),
 
-        save_interval=1000,
+        save_interval=2000,
         keep_period=2000,
 
         num_train_steps=30_000,
@@ -952,19 +1076,19 @@ _CONFIGS = [
         data=LeRobotLiberoDataConfig(
             # NOTE: norm stats is set accordingly to the repo_id
             # NOTE: if u want to use the norm stats from default dataset, add an assets config
-            repo_id="lerobot_put_bowl_on_stove_teleop_120_1029", # NOTE: using pre converted libero_90 dataset
+            repo_id="lerobot_put_bowl_on_stove_teleop_120_1103", # NOTE: using pre converted libero_90 dataset
             base_config=DataConfig(prompt_from_task=True),
             extra_delta_transform=False,
-            # assets=AssetsConfig(
-            #     assets_dir="/home/hice1/zchen927/scratch/openpi/assets/pi05_libero/physical-intelligence",
-            #     asset_id="libero",
-            # ),
+            assets=AssetsConfig(
+                assets_dir="/home/hice1/zchen927/scratch/openpi/assets/pi05_libero/physical-intelligence",
+                asset_id="libero",
+            ),
         ),
         batch_size=256,
         num_train_steps=30_000,
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_libero/params"), # NOTE: using pi05_libero base model
 
-        save_interval=1000,
+        save_interval=2000,
         keep_period=2000,
 
         lr_schedule=_optimizer.CosineDecaySchedule(
@@ -1009,6 +1133,39 @@ _CONFIGS = [
         ).get_freeze_filter(),
         # Turn off EMA for LoRA finetuning.
         ema_decay=None,
+    ),
+    TrainConfig(
+        name="pi05_libero_cotraining_all_pairs_step_30_1107_pi_libero",
+        # Example config demonstrating cotraining on multiple Libero datasets.
+        # All datasets share the same transforms and normalization stats (from asset_id).
+        # Each dataset uses its own prompt handling if prompt_from_task is True.
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
+        data=MultiDatasetLiberoDataConfig(
+            repo_ids=["pi_libero_lerobot", "lerobot_all_task_pairs_step_30_1107_lang"],  # Example: cotrain on multiple datasets
+            # Optional: adjust sampling ratio. [2.0, 1.0] means dataset 0 is sampled twice as often as dataset 1.
+            # If None, uniform sampling is used.
+            dataset_weights=[1.0, 3.0],
+            base_config=DataConfig(prompt_from_task=True),
+            extra_delta_transform=False,
+            # Use shared normalization stats from a single asset_id
+            assets=AssetsConfig(
+                assets_dir="/home/hice1/zchen927/scratch/openpi/assets/pi05_libero/physical-intelligence",
+                asset_id="libero",
+            ),
+        ),
+        batch_size=256,
+        num_train_steps=30_000,
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_libero/params"),
+        save_interval=2000,
+        keep_period=2000,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=10_000,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
     ),
     #
     # Fine-tuning Aloha configs.

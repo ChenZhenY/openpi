@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J pi05_liberogoal_teleop_task9_1031_norm         # Job name
+#SBATCH -J pi05_liberogoal_teleop_all_pairs_1108_2         # Job name
 #SBATCH -N 1 --ntasks-per-node=8        # Number of nodes and tasks per node
 #SBATCH --gres=gpu:h100:4               # Request 8xH100 GPUs
 #SBATCH --mem-per-cpu=128G                # Memory per core
@@ -17,11 +17,15 @@ export HF_DATASETS_CACHE=/home/hice1/zchen927/scratch/datasets/cache # set the c
 
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 # train with 95% of GPU memory
 
+# uv run scripts/train.py \
+#     pi05_liberogoal_teleop \
+#     --exp-name=liberogoal_teleop_batch256_1108_all_pairs \
+#     --data.repo_id=lerobot_all_task_pairs_step_30_1107_lang \
+#     --fsdp-devices=4 \
+#     --batch-size=128
+
 uv run scripts/train.py \
-    pi05_liberogoal_teleop \
-    --exp-name=liberogoal_teleop_batch256_120_1031_norm \
-    --data.repo_id=lerobot_put_bowl_on_stove_teleop_120_1029 \
+    pi05_libero_cotraining_all_pairs_step_30_1107_pi_libero \
+    --exp-name=liberogoal_teleop_batch256_1108_all_pairs_3 \
     --fsdp-devices=4 \
     --batch-size=128
-
-    

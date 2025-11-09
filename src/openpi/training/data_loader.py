@@ -130,25 +130,52 @@ class FakeDataset(Dataset):
 def create_torch_dataset(
     data_config: _config.DataConfig, action_horizon: int, model_config: _model.BaseModelConfig
 ) -> Dataset:
-    """Create a dataset for training."""
-    repo_id = data_config.repo_id
-    if repo_id is None:
-        raise ValueError("Repo ID is not set. Cannot create dataset.")
-    if repo_id == "fake":
+    """Create a dataset for training.
+    
+    Supports both single dataset (via repo_id) and cotraining (via repo_ids).
+    For cotraining, returns a ConcatDataset that combines multiple datasets.
+    Each dataset gets its own prompt handling if prompt_from_task is True.
+    """
+    # Determine which repo_ids to use
+    if data_config.repo_ids is not None:
+        repo_ids = list(data_config.repo_ids)
+    elif data_config.repo_id is not None:
+        repo_ids = [data_config.repo_id]
+    else:
+        raise ValueError("Repo ID(s) not set. Cannot create dataset.")
+    
+    # Handle fake dataset
+    if len(repo_ids) == 1 and repo_ids[0] == "fake":
         return FakeDataset(model_config, num_samples=1024)
-
-    dataset_meta = lerobot_dataset.LeRobotDatasetMetadata(repo_id)
-    dataset = lerobot_dataset.LeRobotDataset(
-        data_config.repo_id,
-        delta_timestamps={
-            key: [t / dataset_meta.fps for t in range(action_horizon)] for key in data_config.action_sequence_keys
-        },
-    )
-
-    if data_config.prompt_from_task:
-        dataset = TransformedDataset(dataset, [_transforms.PromptFromLeRobotTask(dataset_meta.tasks)])
-
-    return dataset
+    
+    # Create datasets for each repo_id
+    datasets = []
+    for repo_id in repo_ids:
+        dataset_meta = lerobot_dataset.LeRobotDatasetMetadata(repo_id)
+        dataset = lerobot_dataset.LeRobotDataset(
+            repo_id,
+            delta_timestamps={
+                key: [t / dataset_meta.fps for t in range(action_horizon)] 
+                for key in data_config.action_sequence_keys
+            },
+        )
+        
+        # Each dataset gets its own prompt handling if enabled
+        if data_config.prompt_from_task:
+            dataset = TransformedDataset(
+                dataset, 
+                [_transforms.PromptFromLeRobotTask(dataset_meta.tasks)]
+            )
+        
+        datasets.append(dataset)
+    
+    # If single dataset, return it directly (backward compatible)
+    if len(datasets) == 1:
+        return datasets[0]
+    
+    # Multiple datasets: wrap in ConcatDataset
+    from torch.utils.data import ConcatDataset
+    return ConcatDataset(datasets)
 
 
 def create_rlds_dataset(
@@ -172,7 +199,11 @@ def create_rlds_dataset(
 def transform_dataset(dataset: Dataset, data_config: _config.DataConfig, *, skip_norm_stats: bool = False) -> Dataset:
     """Transform the dataset by applying the data transforms."""
     norm_stats = {}
-    if data_config.repo_id != "fake" and not skip_norm_stats:
+    # Check if we have fake data (either single or in multi-dataset case)
+    repo_ids = data_config.repo_ids if data_config.repo_ids is not None else ([data_config.repo_id] if data_config.repo_id is not None else [])
+    is_fake = len(repo_ids) == 1 and repo_ids[0] == "fake"
+    
+    if not is_fake and not skip_norm_stats:
         if data_config.norm_stats is None:
             raise ValueError(
                 "Normalization stats not found. "
@@ -320,13 +351,62 @@ def create_torch_data_loader(
             local_batch_size = batch_size
     else:
         local_batch_size = batch_size // jax.process_count()
+    
+    # Create weighted sampler if dataset_weights are provided and we have a ConcatDataset
+    # Works with both PyTorch and JAX frameworks - sampler operates at PyTorch DataLoader level
+    if data_config.dataset_weights is not None and shuffle:
+        from torch.utils.data import ConcatDataset, WeightedRandomSampler
+        if isinstance(dataset, ConcatDataset):
+            # Get individual dataset lengths
+            dataset_lengths = [len(d) for d in dataset.datasets]
+            if len(dataset_lengths) != len(data_config.dataset_weights):
+                raise ValueError(
+                    f"dataset_weights length ({len(data_config.dataset_weights)}) must match "
+                    f"number of datasets ({len(dataset_lengths)})"
+                )
+            
+            # Normalize weights
+            weights_list = list(data_config.dataset_weights)
+            total_weight = sum(weights_list)
+            if total_weight > 0:
+                normalized_weights = [w / total_weight for w in weights_list]
+            else:
+                raise ValueError("dataset_weights must have at least one positive value")
+            
+            # Create per-sample weights: each sample from dataset i gets weight normalized_weights[i]
+            # ConcatDataset concatenates datasets in order, so we can compute cumulative lengths
+            sample_weights = []
+            cumulative_length = 0
+            for i, (length, weight) in enumerate(zip(dataset_lengths, normalized_weights)):
+                # Each sample in this dataset gets the same weight
+                sample_weights.extend([weight] * length)
+                cumulative_length += length
+            
+            # Convert to tensor
+            sample_weights_tensor = torch.tensor(sample_weights, dtype=torch.float32)
+            
+            # Create WeightedRandomSampler
+            # num_samples should be the total dataset length for replacement=True
+            sampler = WeightedRandomSampler(
+                weights=sample_weights_tensor,
+                num_samples=len(dataset),
+                replacement=True,
+                generator=torch.Generator().manual_seed(seed),
+            )
+            logging.info(
+                f"Created WeightedRandomSampler with dataset weights: {weights_list} "
+                f"(normalized: {normalized_weights}), dataset lengths: {dataset_lengths}"
+            )
 
     logging.info(f"local_batch_size: {local_batch_size}")
+    # If we have a sampler (either DistributedSampler or WeightedRandomSampler), don't shuffle
+    # The sampler handles the sampling strategy
+    use_shuffle = sampler is None and shuffle
     data_loader = TorchDataLoader(
         dataset,
         local_batch_size=local_batch_size,
         sharding=None if framework == "pytorch" else sharding,
-        shuffle=(sampler is None and shuffle),  # Don't shuffle if using sampler
+        shuffle=use_shuffle,
         sampler=sampler,
         num_batches=num_batches,
         num_workers=num_workers,

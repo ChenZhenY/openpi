@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH -J pi05_liberogoal_teleop_lora_1103         # Job name
+#SBATCH -J pi05_liberogoal_teleop_lora_all_pairs_1108         # Job name
 #SBATCH -N 1 --ntasks-per-node=8        # Number of nodes and tasks per node
-#SBATCH --gres=gpu:h100:2               # Request 8xH100 GPUs
+#SBATCH --gres=gpu:h100:4               # Request 8xH100 GPUs
 #SBATCH --mem-per-cpu=128G                # Memory per core
 #SBATCH -t 4:00:00                     # Duration of the job
 #SBATCH -o ./output/%x-%j.out           # Combined output and error messages file, with job name
@@ -19,7 +19,7 @@ export XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 # train with 95% of GPU memory
 
 uv run scripts/train.py \
     pi05_liberogoal_teleop_lora \
-    --exp-name=liberogoal_teleop_lora_batch256_120_1103 \
-    --data.repo_id=lerobot_put_bowl_on_stove_teleop_120_1103 \
-    --fsdp-devices=2 \
+    --exp-name=liberogoal_teleop_lora_batch256_1108_all_pairs \
+    --data.repo_id=lerobot_all_task_pairs_step30_1107_lang \
+    --fsdp-devices=4 \
     --batch-size=256
