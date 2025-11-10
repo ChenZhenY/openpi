@@ -354,6 +354,9 @@ def run_experiment_for_latency(args: Args, latency_value: float, timestamp: str,
     total_episodes, total_successes = 0, 0
     
     for task_id in tqdm.tqdm(range(num_tasks_in_suite)):
+
+        if task_id != 8:
+            continue
             
         # Get task
         task = task_suite.get_task(task_id)
