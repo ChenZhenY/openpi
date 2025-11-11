@@ -71,11 +71,13 @@ class Policy(BasePolicy):
         if self._is_pytorch_model:
             self._model = self._model.to(pytorch_device)
             self._model.eval()
-            self._sample_actions = model.sample_actions
         else:
             # JAX model setup
-            self._sample_actions = nnx_utils.module_jit(model.sample_actions)
             self._rng = rng or jax.random.key(0)
+            self._model.embed_prefix = nnx_utils.module_jit(self._model.embed_prefix)
+            self._model.prefill = nnx_utils.module_jit(self._model.prefill)
+            self._model.flow_matching = nnx_utils.module_jit(self._model.flow_matching)
+        self._sample_actions = model.sample_actions
 
     @override
     def infer(self, obs: dict, *, noise: np.ndarray | None = None) -> dict:  # type: ignore[misc]
@@ -89,7 +91,9 @@ class Policy(BasePolicy):
         else:
             # Convert inputs to PyTorch tensors and move to correct device
             inputs = jax.tree.map(
-                lambda x: torch.from_numpy(np.array(x)).to(self._pytorch_device)[None, ...],
+                lambda x: torch.from_numpy(np.array(x)).to(self._pytorch_device)[
+                    None, ...
+                ],
                 inputs,
             )
             sample_rng_or_pytorch_device = self._pytorch_device
@@ -97,31 +101,42 @@ class Policy(BasePolicy):
         # Prepare kwargs for sample_actions
         sample_kwargs = dict(self._sample_kwargs)
         if noise is not None:
-            noise = torch.from_numpy(noise).to(self._pytorch_device) if self._is_pytorch_model else jnp.asarray(noise)
+            noise = (
+                torch.from_numpy(noise).to(self._pytorch_device)
+                if self._is_pytorch_model
+                else jnp.asarray(noise)
+            )
 
-            if noise.ndim == 2:  # If noise is (action_horizon, action_dim), add batch dimension
+            if (
+                noise.ndim == 2
+            ):  # If noise is (action_horizon, action_dim), add batch dimension
                 noise = noise[None, ...]  # Make it (1, action_horizon, action_dim)
             sample_kwargs["noise"] = noise
 
         observation = _model.Observation.from_dict(inputs)
         start_time = time.monotonic()
+        actions, times = self._sample_actions(
+            sample_rng_or_pytorch_device, observation, **sample_kwargs
+        )
+        times["infer_total"] = time.monotonic() - start_time
         outputs = {
             "state": inputs["state"],
-            "actions": self._sample_actions(sample_rng_or_pytorch_device, observation, **sample_kwargs),
+            "actions": actions,
         }
-        model_time = time.monotonic() - start_time
         if self._is_pytorch_model:
-            outputs = jax.tree.map(lambda x: np.asarray(x[0, ...].detach().cpu()), outputs)
+            outputs = jax.tree.map(
+                lambda x: np.asarray(x[0, ...].detach().cpu()), outputs
+            )
         else:
             outputs = jax.tree.map(lambda x: np.asarray(x[0, ...]), outputs)
 
         outputs = self._output_transform(outputs)
-        outputs["policy_timing"] = {
-            "infer_ms": model_time * 1000,
-        }
+        outputs["policy_timing"] = times
         return outputs
 
-    def infer_batch(self, obs_batch: list[dict], *, noise: np.ndarray | None = None) -> list[dict]:
+    def infer_batch(
+        self, obs_batch: list[dict], *, noise: np.ndarray | None = None
+    ) -> list[dict]:
         """Run inference on a batch of observations.
 
         Args:
@@ -170,22 +185,31 @@ class Policy(BasePolicy):
             self._rng, sample_rng_or_pytorch_device = jax.random.split(self._rng)
         else:
             # Convert inputs to PyTorch tensors and move to correct device
-            inputs = jax.tree.map(lambda x: torch.from_numpy(np.array(x)).to(self._pytorch_device), inputs)
+            inputs = jax.tree.map(
+                lambda x: torch.from_numpy(np.array(x)).to(self._pytorch_device), inputs
+            )
             sample_rng_or_pytorch_device = self._pytorch_device
 
         # Prepare kwargs for sample_actions
         sample_kwargs = dict(self._sample_kwargs)
         if noise is not None:
-            noise = torch.from_numpy(noise).to(self._pytorch_device) if self._is_pytorch_model else jnp.asarray(noise)
+            noise = (
+                torch.from_numpy(noise).to(self._pytorch_device)
+                if self._is_pytorch_model
+                else jnp.asarray(noise)
+            )
             sample_kwargs["noise"] = noise
 
         observation = _model.Observation.from_dict(inputs)
         start_time = time.monotonic()
+        actions, times = self._sample_actions(
+            sample_rng_or_pytorch_device, observation, **sample_kwargs
+        )
+        times["infer_total"] = time.monotonic() - start_time
         outputs = {
             "state": inputs["state"],
-            "actions": self._sample_actions(sample_rng_or_pytorch_device, observation, **sample_kwargs),
+            "actions": actions,
         }
-        model_time = time.monotonic() - start_time
 
         if self._is_pytorch_model:
             outputs = jax.tree.map(lambda x: np.asarray(x.detach().cpu()), outputs)
@@ -193,6 +217,7 @@ class Policy(BasePolicy):
             outputs = jax.tree.map(lambda x: np.asarray(x), outputs)
 
         outputs = self._output_transform(outputs)
+        outputs["policy_timing"] = times
 
         # Split batch results back into individual results
         results = []

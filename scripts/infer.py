@@ -7,9 +7,9 @@ checkpoint_dir = download.maybe_download("gs://openpi-assets/checkpoints/pi05_li
 
 # Create a trained policy.
 policy = policy_config.create_trained_policy(config, checkpoint_dir)
-import ipdb
-
-ipdb.set_trace()
 # Run inference on a dummy example.
 example = libero_policy.make_libero_example()
-action_chunk = policy.infer(example)["actions"]
+policy.infer(example)
+outputs = policy.infer(example)
+print("actions", outputs["actions"].shape)
+print("policy_timing", outputs["policy_timing"])
