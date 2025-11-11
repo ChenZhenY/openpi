@@ -13,7 +13,6 @@ from openpi.models import pi0_config
 import openpi.models.gemma as _gemma
 import openpi.models.siglip as _siglip
 from openpi.shared import array_typing as at
-from openpi.shared import nnx_utils
 
 logger = logging.getLogger("openpi")
 
@@ -288,26 +287,31 @@ class Pi0(_model.BaseModel):
         times = {}
         start = time.monotonic()
         observation = _model.preprocess_observation(None, observation, train=False)
+        observation = jax.block_until_ready(observation)
         times["preprocess"] = time.monotonic() - start
 
         # first fill KV cache with a forward pass of the prefix
         start = time.monotonic()
         prefix_tokens, prefix_mask, prefix_ar_mask = self.embed_prefix(observation)
+        prefix_tokens, prefix_mask, prefix_ar_mask = jax.block_until_ready((prefix_tokens, prefix_mask, prefix_ar_mask))
         times["embed_prefix"] = time.monotonic() - start
 
         start = time.monotonic()
         prefix_attn_mask = make_attn_mask(prefix_mask, prefix_ar_mask)
         positions = jnp.cumsum(prefix_mask, axis=1) - 1
+        prefix_attn_mask, positions = jax.block_until_ready((prefix_attn_mask, positions))
         # note that we use the convention more common in diffusion literature, where t=1 is noise and t=0 is the target
         # distribution. yes, this is the opposite of the pi0 paper, and I'm sorry.
         dt = -1.0 / num_steps
         batch_size = observation.state.shape[0]
         if noise is None:
             noise = jax.random.normal(rng, (batch_size, self.action_horizon, self.action_dim))
+        noise = jax.block_until_ready(noise)
         times["overhead"] = time.monotonic() - start
 
         start = time.monotonic()
         _, kv_cache = self.prefill(prefix_tokens, prefix_attn_mask, positions)
+        kv_cache = jax.block_until_ready(kv_cache)
         times["prefill"] = time.monotonic() - start
 
         start = time.monotonic()
@@ -319,6 +323,7 @@ class Pi0(_model.BaseModel):
             prefix_tokens,
             prefix_mask,
         )
+        x_0 = jax.block_until_ready(x_0)
         times["flow_matching"] = time.monotonic() - start
 
         return x_0, times
