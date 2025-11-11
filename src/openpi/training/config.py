@@ -1141,7 +1141,8 @@ _CONFIGS = [
         # Each dataset uses its own prompt handling if prompt_from_task is True.
         model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
         data=MultiDatasetLiberoDataConfig(
-            repo_ids=["pi_libero_lerobot", "lerobot_all_task_pairs_step_30_1107_lang"],  # Example: cotrain on multiple datasets
+            repo_ids=["pi_libero_lerobot", "lerobot_interpolation_30steps_1111"], 
+            # repo_ids=["pi_libero_lerobot", "lerobot_all_task_pairs_step_30_1107_lang"],  # Example: cotrain on multiple datasets
             # Optional: adjust sampling ratio. [2.0, 1.0] means dataset 0 is sampled twice as often as dataset 1.
             # If None, uniform sampling is used.
             dataset_weights=[1.0, 3.0],
