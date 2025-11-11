@@ -56,6 +56,7 @@ class RequestFuncOutput:
     latency: float  # seconds
     start_time: float
     error: str | None = None
+    outputs: dict | None = None
 
 
 @dataclass
@@ -171,7 +172,7 @@ def calculate_metrics(
 async def send_request(policy: AsyncWebsocketClientPolicy, obs: dict, pbar: tqdm | None) -> RequestFuncOutput:
     """Send a request to the server."""
     start_time = time.perf_counter()
-    _ = await policy.infer(obs)
+    outputs = await policy.infer(obs)
     latency = time.perf_counter() - start_time
     if pbar is not None:
         pbar.update(1)
@@ -180,6 +181,7 @@ async def send_request(policy: AsyncWebsocketClientPolicy, obs: dict, pbar: tqdm
         latency=latency * 1000,
         start_time=start_time,
         error=None,
+        outputs=outputs,
     )
 
 
@@ -292,6 +294,7 @@ async def benchmark(
         "latencies": [o.latency for o in outputs if o.success],
         "arrival_times": arrival_times,
         "errors": [o.error for o in outputs if not o.success],
+        "policy_timing": [o.outputs["policy_timing"] for o in outputs if o.success],
     }
 
 
