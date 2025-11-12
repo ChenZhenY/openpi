@@ -28,4 +28,5 @@ uv run scripts/train.py \
     pi05_libero_cotraining_all_pairs_step_30_1107_pi_libero \
     --exp-name=liberogoal_teleop_batch256_1111_pi_libero_interpolation \
     --fsdp-devices=4 \
-    --batch-size=128
+    --batch-size=128 \
+    --resume
