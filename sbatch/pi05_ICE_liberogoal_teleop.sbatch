@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J pi05_liberogoal_teleop_1111_pi_libero_interpolation         # Job name
+#SBATCH -J pi05_libero_cotraining_interpolation_1112         # Job name
 #SBATCH -N 1 --ntasks-per-node=8        # Number of nodes and tasks per node
 #SBATCH --gres=gpu:h100:4               # Request 8xH100 GPUs
 #SBATCH --mem-per-cpu=128G                # Memory per core
@@ -25,8 +25,8 @@ export XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 # train with 95% of GPU memory
 #     --batch-size=128
 
 uv run scripts/train.py \
-    pi05_libero_cotraining_all_pairs_step_30_1107_pi_libero \
-    --exp-name=liberogoal_teleop_batch256_1111_pi_libero_interpolation \
+    pi05_libero_cotraining_interpolation \
+    --exp-name=liberogoal_pi_libero_cotraining_interpolation \
     --fsdp-devices=4 \
     --batch-size=128 \
     --resume
