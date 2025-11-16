@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+import enum
 import logging
 import pathlib
 import time
@@ -15,10 +16,23 @@ from typing_extensions import override
 
 from openpi import transforms as _transforms
 from openpi.models import model as _model
+from openpi.policies.aloha_policy import make_aloha_example
+from openpi.policies.droid_policy import make_droid_example
+from openpi.policies.libero_policy import make_libero_example
 from openpi.shared import array_typing as at
 from openpi.shared import nnx_utils
 
 BasePolicy: TypeAlias = _base_policy.BasePolicy
+
+
+class EnvMode(enum.Enum):
+    """Supported environments."""
+
+    ALOHA = "aloha"
+    ALOHA_SIM = "aloha_sim"
+    DROID = "droid"
+    LIBERO = "libero"
+    LIBERO_REALTIME = "libero_realtime"
 
 
 class Policy(BasePolicy):
@@ -76,7 +90,12 @@ class Policy(BasePolicy):
             self._rng, sample_rng_or_pytorch_device = jax.random.split(self._rng)
         else:
             # Convert inputs to PyTorch tensors and move to correct device
-            inputs = jax.tree.map(lambda x: torch.from_numpy(np.array(x)).to(self._pytorch_device)[None, ...], inputs)
+            inputs = jax.tree.map(
+                lambda x: torch.from_numpy(np.array(x)).to(self._pytorch_device)[
+                    None, ...
+                ],
+                inputs,
+            )
             sample_rng_or_pytorch_device = self._pytorch_device
 
         # Prepare kwargs for sample_actions
@@ -84,9 +103,15 @@ class Policy(BasePolicy):
         sample_kwargs["s"] = s_param
         sample_kwargs["d"] = d_param
         if noise is not None:
-            noise = torch.from_numpy(noise).to(self._pytorch_device) if self._is_pytorch_model else jnp.asarray(noise)
+            noise = (
+                torch.from_numpy(noise).to(self._pytorch_device)
+                if self._is_pytorch_model
+                else jnp.asarray(noise)
+            )
 
-            if noise.ndim == 2:  # If noise is (action_horizon, action_dim), add batch dimension
+            if (
+                noise.ndim == 2
+            ):  # If noise is (action_horizon, action_dim), add batch dimension
                 noise = noise[None, ...]  # Make it (1, action_horizon, action_dim)
             sample_kwargs["noise"] = noise
 
@@ -122,7 +147,9 @@ class Policy(BasePolicy):
             
         model_time = time.monotonic() - start_time
         if self._is_pytorch_model:
-            outputs = jax.tree.map(lambda x: np.asarray(x[0, ...].detach().cpu()), outputs)
+            outputs = jax.tree.map(
+                lambda x: np.asarray(x[0, ...].detach().cpu()), outputs
+            )
         else:
             outputs = jax.tree.map(lambda x: np.asarray(x[0, ...]), outputs)
 
@@ -132,23 +159,25 @@ class Policy(BasePolicy):
         }
         return outputs
 
-    def infer_batch(self, obs_batch: list[dict], *, noise: np.ndarray | None = None) -> list[dict]:
+    def infer_batch(
+        self, obs_batch: list[dict], *, noise: np.ndarray | None = None
+    ) -> list[dict]:
         """Run inference on a batch of observations.
-        
+
         Args:
             obs_batch: List of observation dictionaries
             noise: Optional noise tensor for batch (shape: batch_size, action_horizon, action_dim)
-            
+
         Returns:
             List of result dictionaries, one for each input observation
         """
         if not obs_batch:
             return []
-        
+
         # Check if all observations have the same structure
         first_obs = obs_batch[0]
         batch_size = len(obs_batch)
-        
+
         # Stack observations into batch format
         batched_obs = {}
         for key in first_obs.keys():
@@ -170,41 +199,49 @@ class Policy(BasePolicy):
                     batched_obs[key] = values
             else:
                 batched_obs[key] = [obs.get(key, None) for obs in obs_batch]
-        
+
         # Apply transforms to batched observation
         inputs = jax.tree.map(lambda x: x, batched_obs)
         inputs = self._input_transform(inputs)
-        
+
         if not self._is_pytorch_model:
             # Convert to jax.Array (already batched)
             inputs = jax.tree.map(lambda x: jnp.asarray(x), inputs)
             self._rng, sample_rng_or_pytorch_device = jax.random.split(self._rng)
         else:
             # Convert inputs to PyTorch tensors and move to correct device
-            inputs = jax.tree.map(lambda x: torch.from_numpy(np.array(x)).to(self._pytorch_device), inputs)
+            inputs = jax.tree.map(
+                lambda x: torch.from_numpy(np.array(x)).to(self._pytorch_device), inputs
+            )
             sample_rng_or_pytorch_device = self._pytorch_device
 
         # Prepare kwargs for sample_actions
         sample_kwargs = dict(self._sample_kwargs)
         if noise is not None:
-            noise = torch.from_numpy(noise).to(self._pytorch_device) if self._is_pytorch_model else jnp.asarray(noise)
+            noise = (
+                torch.from_numpy(noise).to(self._pytorch_device)
+                if self._is_pytorch_model
+                else jnp.asarray(noise)
+            )
             sample_kwargs["noise"] = noise
 
         observation = _model.Observation.from_dict(inputs)
         start_time = time.monotonic()
         outputs = {
             "state": inputs["state"],
-            "actions": self._sample_actions(sample_rng_or_pytorch_device, observation, **sample_kwargs),
+            "actions": self._sample_actions(
+                sample_rng_or_pytorch_device, observation, **sample_kwargs
+            ),
         }
         model_time = time.monotonic() - start_time
-        
+
         if self._is_pytorch_model:
             outputs = jax.tree.map(lambda x: np.asarray(x.detach().cpu()), outputs)
         else:
             outputs = jax.tree.map(lambda x: np.asarray(x), outputs)
 
         outputs = self._output_transform(outputs)
-        
+
         # Split batch results back into individual results
         results = []
         for i in range(batch_size):
@@ -217,24 +254,24 @@ class Policy(BasePolicy):
                 else:
                     result[key] = value
             results.append(result)
-        
+
         return results
 
     @property
     def metadata(self) -> dict[str, Any]:
         return self._metadata
 
-    def save_data(self) -> None:
-        """Save collected data from the model if supported.
-        
-        This method delegates to the underlying model's save_data method
-        if it exists (e.g., for Pi0Triton model which collects inference data).
-        """
-        if hasattr(self._model, 'save_data'):
-            self._model.save_data()
-            logging.info("Model data saved successfully")
-        else:
-            logging.warning(f"Model {type(self._model).__name__} does not support save_data method")
+    def make_example(self) -> dict:
+        assert "env" in self._metadata, "Environment not set in metadata"
+        env = EnvMode(self._metadata["env"])
+        if env == EnvMode.ALOHA:
+            return make_aloha_example()
+        if env == EnvMode.DROID:
+            return make_droid_example()
+        if env == EnvMode.LIBERO or env == EnvMode.LIBERO_REALTIME:
+            return make_libero_example()
+
+        raise ValueError(f"Unknown environment: {env}")
 
 
 class PolicyRecorder(_base_policy.BasePolicy):

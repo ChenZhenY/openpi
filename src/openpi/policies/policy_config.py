@@ -79,7 +79,6 @@ def create_trained_policy(
     checkpoint_dir = download.maybe_download(str(checkpoint_dir))
     
     logging.info("Loading model...")
-    
     if use_triton_optimized:
         # Load the Triton-optimized model
         from openpi.models import pi0_triton
@@ -103,9 +102,7 @@ def create_trained_policy(
         # JAX model
         model = train_config.model.load(_model.restore_params(checkpoint_dir / "params", dtype=jnp.bfloat16))
         is_pytorch = False
-    
-    # ... rest of the existing code ...
-    
+        
     data_config = train_config.data.create(train_config.assets_dirs, train_config.model)
     if norm_stats is None:
         # We are loading the norm stats from the checkpoint instead of the config assets dir to make sure

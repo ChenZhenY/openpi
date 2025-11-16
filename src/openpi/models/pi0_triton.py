@@ -38,11 +38,6 @@ class Pi0Triton(_model.BaseModel):
         )
         self.config = config
         self.num_views = num_views
-
-        self.images_save = []
-        self.states_save = []
-        self.noise_save = []
-        self.output_actions_save = []
         
     def to(self, device):
         """Move model to device (for PyTorch compatibility).
@@ -124,7 +119,11 @@ class Pi0Triton(_model.BaseModel):
     @torch.no_grad()
     def sample_actions(self, device, observation: _model.Observation, 
                     noise=None, num_steps=10) -> torch.Tensor:
-        """Sample actions using the optimized Triton kernels."""
+        """Sample actions using the optimized Triton kernels.
+        
+        Note: This implementation processes batch items sequentially as the underlying
+        Triton kernels are optimized for single-sample inference.
+        """
         
         # Preprocess observation (same as Pi0.sample_actions line 225)
         bsize = observation.state.shape[0]
@@ -133,44 +132,35 @@ class Pi0Triton(_model.BaseModel):
             noise = self.sample_noise(actions_shape, device)
 
         images, img_masks, lang_tokens, lang_masks, state = self._preprocess_observation(observation, train=False)
-        
-
         images = images[:self.num_views]
-        images_converted = []
-        for img in images:
-            img = img[0]
-            img = img.permute(1, 2, 0)  # Convert to (H, W, C)
-            images_converted.append(img)
         
-        images_stacked = torch.stack(images_converted, dim=0)  # (num_views, H, W, C)
-        images_bf16 = images_stacked.to(dtype=torch.bfloat16, device='cuda')
-        self.images_save.append(images_bf16)
-
-        state_bf16 = state[0].to(dtype=torch.bfloat16, device='cuda')
-        self.states_save.append(state_bf16)
-        noise_input = noise[0].to(dtype=torch.bfloat16, device='cuda')
-        self.noise_save.append(noise_input)
+        # Process each batch item
+        batch_actions = []
+        for batch_idx in range(bsize):
+            # Extract and convert images for this batch item
+            images_converted = []
+            for img in images:
+                img_sample = img[batch_idx]
+                img_sample = img_sample.permute(1, 2, 0)  # Convert to (H, W, C)
+                images_converted.append(img_sample)
+            
+            images_stacked = torch.stack(images_converted, dim=0)  # (num_views, H, W, C)
+            images_bf16 = images_stacked.to(dtype=torch.bfloat16, device='cuda')
+            
+            state_bf16 = state[batch_idx].to(dtype=torch.bfloat16, device='cuda')
+            noise_input = noise[batch_idx].to(dtype=torch.bfloat16, device='cuda')
+            
+            # Run inference for this sample
+            output_actions = self.inference_engine.forward(
+                images_bf16,
+                state_bf16,
+                noise_input
+            )
+            
+            batch_actions.append(output_actions)
         
-        # Run inference
-        output_actions = self.inference_engine.forward(
-            images_bf16,
-            state_bf16,
-            noise_input
-        )
-        self.output_actions_save.append(output_actions)
-        
-        # (1, action_horizon, action_dim)
-        return output_actions.unsqueeze(0).to(dtype=torch.float32)
-
-    def save_data(self):
-        with open('/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/save_data_realtime/images_bf16_save.pkl', 'wb') as f:
-            pickle.dump(self.images_save, f)
-        with open('/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/save_data_realtime/states_bf16_save.pkl', 'wb') as f:
-            pickle.dump(self.states_save, f)
-        with open('/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/save_data_realtime/noise_bf16_save.pkl', 'wb') as f:
-            pickle.dump(self.noise_save, f)
-        with open('/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/save_data_realtime/output_actions_float32_save.pkl', 'wb') as f:
-            pickle.dump(self.output_actions_save, f)
+        # Stack all batch results: (batch_size, action_horizon, action_dim)
+        return torch.stack(batch_actions, dim=0).to(dtype=torch.float32)
     
     @classmethod
     def from_converted_checkpoint(cls, config: pi0_config.Pi0Config, 
