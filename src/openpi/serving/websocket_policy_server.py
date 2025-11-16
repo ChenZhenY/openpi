@@ -57,6 +57,31 @@ class WebsocketPolicyServer:
                 start_time = time.monotonic()
                 data = msgpack_numpy.unpackb(await websocket.recv())
 
+                # Check if this is a command (like save_data) instead of an inference request
+                if isinstance(data, dict) and "command" in data:
+                    command = data["command"]
+                    if command == "save_data":
+                        # Call save_data on the policy's model if it exists
+                        if hasattr(self._policy, 'save_data'):
+                            try:
+                                self._policy.save_data()
+                                response = {"status": "success", "message": "Data saved successfully"}
+                                await websocket.send(packer.pack(response))
+                            except Exception as e:
+                                error_msg = f"Error saving data: {str(e)}"
+                                logger.error(error_msg)
+                                await websocket.send(packer.pack({"status": "error", "message": error_msg}))
+                        else:
+                            msg = "Policy does not support save_data method"
+                            logger.warning(msg)
+                            await websocket.send(packer.pack({"status": "warning", "message": msg}))
+                        continue
+                    else:
+                        error_msg = f"Unknown command: {command}"
+                        logger.error(error_msg)
+                        await websocket.send(packer.pack({"status": "error", "message": error_msg}))
+                        continue
+
                 # Extract observation and optional parameters from the data
                 obs = data.get("observation", data)  # Fall back to data if "observation" key doesn't exist
                 prev_action = data.get("prev_action", None)

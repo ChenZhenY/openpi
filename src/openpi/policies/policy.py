@@ -115,6 +115,10 @@ class Policy(BasePolicy):
                 "actions": origin_actions,
                 "origin_actions": origin_actions,
             }
+        
+        # Collect data for JAX models (after JIT execution)
+        if not self._is_pytorch_model and hasattr(self._model, 'output_actions_save'):
+            self._model.output_actions_save.append(origin_actions)
             
         model_time = time.monotonic() - start_time
         if self._is_pytorch_model:
@@ -219,6 +223,18 @@ class Policy(BasePolicy):
     @property
     def metadata(self) -> dict[str, Any]:
         return self._metadata
+
+    def save_data(self) -> None:
+        """Save collected data from the model if supported.
+        
+        This method delegates to the underlying model's save_data method
+        if it exists (e.g., for Pi0Triton model which collects inference data).
+        """
+        if hasattr(self._model, 'save_data'):
+            self._model.save_data()
+            logging.info("Model data saved successfully")
+        else:
+            logging.warning(f"Model {type(self._model).__name__} does not support save_data method")
 
 
 class PolicyRecorder(_base_policy.BasePolicy):

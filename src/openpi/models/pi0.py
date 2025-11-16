@@ -12,6 +12,7 @@ from openpi.models import pi0_config
 import openpi.models.gemma as _gemma
 import openpi.models.siglip as _siglip
 from openpi.shared import array_typing as at
+import pickle
 
 logger = logging.getLogger("openpi")
 
@@ -101,6 +102,8 @@ class Pi0(_model.BaseModel):
 
         # This attribute gets automatically set by model.train() and model.eval().
         self.deterministic = True
+
+        self.output_actions_save = []
 
     @at.typecheck
     def embed_prefix(
@@ -407,3 +410,7 @@ class Pi0(_model.BaseModel):
         x_0, _ = jax.lax.while_loop(cond, step, (noise, 1.0))
         
         return x_0
+
+    def save_data(self) -> None:
+        with open('/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/save_data/output_actions_float32_save.pkl', 'wb') as f:
+            pickle.dump(self.output_actions_save, f)

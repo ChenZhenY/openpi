@@ -38,6 +38,11 @@ class Pi0Triton(_model.BaseModel):
         )
         self.config = config
         self.num_views = num_views
+
+        self.images_save = []
+        self.states_save = []
+        self.noise_save = []
+        self.output_actions_save = []
         
     def to(self, device):
         """Move model to device (for PyTorch compatibility).
@@ -139,9 +144,12 @@ class Pi0Triton(_model.BaseModel):
         
         images_stacked = torch.stack(images_converted, dim=0)  # (num_views, H, W, C)
         images_bf16 = images_stacked.to(dtype=torch.bfloat16, device='cuda')
-        
+        self.images_save.append(images_bf16)
+
         state_bf16 = state[0].to(dtype=torch.bfloat16, device='cuda')
+        self.states_save.append(state_bf16)
         noise_input = noise[0].to(dtype=torch.bfloat16, device='cuda')
+        self.noise_save.append(noise_input)
         
         # Run inference
         output_actions = self.inference_engine.forward(
@@ -149,9 +157,20 @@ class Pi0Triton(_model.BaseModel):
             state_bf16,
             noise_input
         )
+        self.output_actions_save.append(output_actions)
         
         # (1, action_horizon, action_dim)
         return output_actions.unsqueeze(0).to(dtype=torch.float32)
+
+    def save_data(self):
+        with open('/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/save_data_realtime/images_bf16_save.pkl', 'wb') as f:
+            pickle.dump(self.images_save, f)
+        with open('/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/save_data_realtime/states_bf16_save.pkl', 'wb') as f:
+            pickle.dump(self.states_save, f)
+        with open('/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/save_data_realtime/noise_bf16_save.pkl', 'wb') as f:
+            pickle.dump(self.noise_save, f)
+        with open('/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/save_data_realtime/output_actions_float32_save.pkl', 'wb') as f:
+            pickle.dump(self.output_actions_save, f)
     
     @classmethod
     def from_converted_checkpoint(cls, config: pi0_config.Pi0Config, 

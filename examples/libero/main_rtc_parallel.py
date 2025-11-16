@@ -186,9 +186,6 @@ def eval_libero(
                 image_tools.resize_with_pad(wrist_img, args.resize_size, args.resize_size)
             )
 
-            # Save preprocessed image for replay video
-            replay_images.append(img)
-
             # Prepare observations dict
             _worker_status_dict[pid] = f"ep{episode_idx}: t={t} preparing obs"
             element = {
@@ -216,8 +213,11 @@ def eval_libero(
             additional_delay_times.append(additional_delay)
             # Simulate the additional delay by repeating last action
             if additional_delay > 0:
+                _worker_status_dict[pid] = f"ep{episode_idx}: t={t} delaying"
                 delay_steps = int(additional_delay / 0.05)  # Assuming 20Hz
                 for _ in range(delay_steps):
+                    # Save frame during delay to show pause in video
+                    replay_images.append(img)
                     obs, reward, done, info = env.step([0.0] * 6 + [last_gripper])
                     # t += 1
                     # if done or t >= max_steps:
@@ -227,6 +227,9 @@ def eval_libero(
                         break
                 if done:
                     break
+
+            # Save current frame for replay video (after delay)
+            replay_images.append(img)
 
             # Execute action in environment
             _worker_status_dict[pid] = f"ep{episode_idx}: t={t} stepping"

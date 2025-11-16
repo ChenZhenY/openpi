@@ -76,6 +76,30 @@ class WebsocketClientPolicy(_base_policy.BasePolicy):
     def reset(self) -> None:
         pass
 
+    def save_data(self) -> None:
+        """Request the server to save collected data."""
+        data = {"command": "save_data"}
+        data = self._packer.pack(data)
+        
+        # Use lock to ensure thread-safe WebSocket communication
+        with self._ws_lock:
+            self._ws.send(data)
+            response = self._ws.recv()
+        
+        if isinstance(response, str):
+            # Check if it's an error message
+            if response.startswith("Error"):
+                raise RuntimeError(f"Error in inference server:\n{response}")
+            # Otherwise it's a success message
+            logging.info(response)
+        else:
+            # Binary response - unpack it
+            result = msgpack_numpy.unpackb(response)
+            if "status" in result:
+                logging.info(f"Save data status: {result['status']}")
+            if "message" in result:
+                logging.info(result["message"])
+
 
 class AsyncWebsocketClientPolicy:
     """Async version of WebsocketClientPolicy for high-performance concurrent requests.
