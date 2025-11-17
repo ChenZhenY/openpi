@@ -56,6 +56,11 @@ class LiberoInputs(transforms.DataTransformFn):
         # and two wrist views (left and right). If your dataset does not have a particular type
         # of image, e.g. wrist images, you can comment it out here and replace it with zeros like we do for the
         # right wrist image below.
+        if "observation" in data:
+            data["observation/image"] = data["observation"]["observation/image"]
+            data["observation/wrist_image"] = data["observation"]["observation/wrist_image"]
+            data["observation/state"] = data["observation"]["observation/state"]
+            data["prompt"] = data["observation"]["prompt"]
         base_image = _parse_image(data["observation/image"])
         wrist_image = _parse_image(data["observation/wrist_image"])
 

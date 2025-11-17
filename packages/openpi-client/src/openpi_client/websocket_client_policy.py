@@ -2,7 +2,7 @@ import asyncio
 import logging
 import threading
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, List
 
 import numpy as np
 from typing_extensions import override
@@ -71,6 +71,14 @@ class WebsocketClientPolicy(_base_policy.BasePolicy):
             # we're expecting bytes; if the server sends a string, it's an error.
             raise RuntimeError(f"Error in inference server:\n{response}")
         return msgpack_numpy.unpackb(response)
+
+    @override
+    def infer_batch(self, obs_batch: List[Dict]) -> List[Dict]:
+        return [self.infer(obs) for obs in obs_batch]
+    
+    @override
+    def make_example(self) -> Dict:
+        return None
 
     @override
     def reset(self) -> None:

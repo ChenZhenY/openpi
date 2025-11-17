@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, List
 
 import json
 import pathlib
@@ -92,6 +92,14 @@ class ActionChunkBroker(_base_policy.BasePolicy):
                 self._last_results = None
 
             return results
+
+    @override
+    def infer_batch(self, obs_batch: List[Dict]) -> List[Dict]:
+        return [self.infer(obs) for obs in obs_batch]
+
+    @override
+    def make_example(self) -> Dict:
+        return None
 
     @override
     def reset(self) -> None:

@@ -1,5 +1,5 @@
 import abc
-from typing import Dict
+from typing import Dict, List
 
 
 class BasePolicy(abc.ABC):
@@ -8,7 +8,7 @@ class BasePolicy(abc.ABC):
         """Infer actions from observations."""
 
     @abc.abstractmethod
-    def infer_batch(self, obs_batch: list[Dict]) -> list[Dict]:
+    def infer_batch(self, obs_batch: List[Dict]) -> List[Dict]:
         """Infer actions from a batch of observations."""
 
     def reset(self) -> None:
