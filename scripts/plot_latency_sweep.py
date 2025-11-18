@@ -10,7 +10,7 @@ import numpy as np
 from pathlib import Path
 
 # Define the base directory containing the latency sweep data
-BASE_DIR = Path("/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/data/libero/latency_sweep_rtc_off")
+BASE_DIR = Path("data/libero/latency_sweep_rtc_off")
 
 # Define latency values to analyze
 LATENCIES = [0.0, 10.0, 50.0, 100.0, 150.0, 200.0, 250.0, 300.0, 400.0]
@@ -157,7 +157,7 @@ def main():
         print_summary_statistics(df)
         
         # Create the plot
-        output_dir = Path("/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/scripts")
+        output_dir = Path("scripts")
         output_path = output_dir / "latency_sweep_successes_plot.png"
         
         print(f"\nCreating plot...")

@@ -61,8 +61,8 @@ class Args:
     #################################################################################################################
     # Environment parameters
     #################################################################################################################
-    bddl_file: str = "/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/examples/libero/moving_obj_scene/KITCHEN_SCENE1_put_the_black_bowl_on_the_plate.bddl"  # Path to BDDL file
-    init_file: str = "/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/examples/libero/moving_obj_scene/KITCHEN_SCENE1_put_the_black_bowl_on_the_plate.init"  # Path to .init file with initial states
+    bddl_file: str = "examples/libero/moving_obj_scene/KITCHEN_SCENE1_put_the_black_bowl_on_the_plate.bddl"  # Path to BDDL file
+    init_file: str = "examples/libero/moving_obj_scene/KITCHEN_SCENE1_put_the_black_bowl_on_the_plate.init"  # Path to .init file with initial states
     num_steps_wait: int = 10  # Number of steps to wait for objects to stabilize in sim
     num_trials: int = 20  # Number of rollouts
     max_steps: int = 400  # Maximum steps per episode
@@ -72,8 +72,8 @@ class Args:
     #################################################################################################################
     # Utils
     #################################################################################################################
-    video_out_path: str = "/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/examples/libero/data/moving_bowl/videos"  # Path to save videos
-    results_csv_path: str = "/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/examples/libero/data/moving_bowl/results.csv"  # Path to save CSV results
+    video_out_path: str = "examples/libero/data/moving_bowl/videos"  # Path to save videos
+    results_csv_path: str = "examples/libero/data/moving_bowl/results.csv"  # Path to save CSV results
     seed: int = 18  # Random Seed (for reproducibility)
     use_rtc: bool = False  # Use RTC mode
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=sweep_latency
-#SBATCH --output=/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/scripts/log/sweep_latency_%j.out
-#SBATCH --error=/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/scripts/log/sweep_latency_%j.err
+#SBATCH --output=scripts/log/sweep_latency_%j.out
+#SBATCH --error=scripts/log/sweep_latency_%j.err
 #SBATCH --partition=overcap
 #SBATCH --nodes=2
 #SBATCH --ntasks-per-node=1
@@ -44,7 +44,6 @@ trap cleanup EXIT INT TERM
 echo "Starting server on $SERVER_NODE..."
 srun --nodes=1 --ntasks=1 -w $SERVER_NODE bash -c "
     source ~/.bashrc
-    cd /srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi
     source .venv/bin/activate
     uv run scripts/serve_policy.py --env=LIBERO
 " &
@@ -56,7 +55,6 @@ sleep 10
 echo "Starting client on $CLIENT_NODE..."
 srun --nodes=1 --ntasks=1 -w $CLIENT_NODE bash -c "
     source ~/.bashrc
-    cd /srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi
     source examples/libero/.venv/bin/activate
     export PYTHONPATH=\$PYTHONPATH:\$PWD/third_party/libero
     export MUJOCO_GL=egl

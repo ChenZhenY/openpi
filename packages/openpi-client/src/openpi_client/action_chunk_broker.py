@@ -35,7 +35,6 @@ class ActionChunkBroker(_base_policy.BasePolicy):
         self._s = s # 25
         self._d = d # 10
         self._is_rtc = is_rtc
-        # self._norm_stats = json.loads(pathlib.Path("/srv/rl2-lab/flash8/rbansal66/openpi/.cache/openpi/openpi-assets/checkpoints/pi05_libero/assets/physical-intelligence/libero/norm_stats.json").read_text())["norm_stats"]
         print(f"initialized with s: {s}, d: {d}")
         if self._is_rtc:
             self._infer_thread = threading.Thread(target=self._background_infer)

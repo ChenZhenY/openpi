@@ -409,7 +409,7 @@ class Pi0(_model.BaseModel):
         return x_0
 
     def save_data(self) -> None:
-        with open('/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/save_data/output_actions_float32_save.pkl', 'wb') as f:
+        with open('save_data/output_actions_float32_save.pkl', 'wb') as f:
             pickle.dump(self.output_actions_save, f)
     
     @override

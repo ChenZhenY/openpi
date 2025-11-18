@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=sweep_action_horizons
-#SBATCH --output=/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/scripts/log/sweep_action_horizons_%j.out
-#SBATCH --error=/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/scripts/log/sweep_action_horizons_%j.err
+#SBATCH --output=scripts/log/sweep_action_horizons_%j.out
+#SBATCH --error=scripts/log/sweep_action_horizons_%j.err
 #SBATCH --partition=overcap
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -38,8 +38,6 @@ cleanup() {
 # Register the cleanup function to run on EXIT
 trap cleanup EXIT INT TERM
 
-cd /srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi
-
 # Start the background process based on action horizon
 source .venv/bin/activate
 
@@ -47,17 +45,17 @@ if [ "$ACTION_HORIZON" = "25" ]; then
     echo "Starting background process for horizon 25: serve_policy.py"
     uv run scripts/serve_policy.py \
         policy:checkpoint --policy.config=pi05_libero_lora \
-        --policy.dir=/srv/rl2-lab/flash8/rbansal66/openpi/checkpoints/pi05_libero_lora/libero_lora_finetune_single_gpu/10000 &
+        --policy.dir=checkpoints/pi05_libero_lora/libero_lora_finetune_single_gpu/10000 &
 elif [ "$ACTION_HORIZON" = "50" ]; then
     echo "Starting background process for horizon 50: serve_policy.py"
     uv run scripts/serve_policy.py \
         policy:checkpoint --policy.config=pi05_libero_lora \
-        --policy.dir=/srv/rl2-lab/flash8/rbansal66/openpi/checkpoints/pi05_libero_lora/libero_lora_finetune_single_gpu/10000 &
+        --policy.dir=checkpoints/pi05_libero_lora/libero_lora_finetune_single_gpu/10000 &
 elif [ "$ACTION_HORIZON" = "100" ]; then
     echo "Starting background process for horizon $ACTION_HORIZON (default): serve_policy.py --env=LIBERO"
     uv run scripts/serve_policy.py \
         policy:checkpoint --policy.config=pi05_libero_lora \
-        --policy.dir=/srv/rl2-lab/flash8/rbansal66/openpi/checkpoints/pi05_libero_lora/libero_lora_finetune_single_gpu/10000 &
+        --policy.dir=checkpoints/pi05_libero_lora/libero_lora_finetune_single_gpu/10000 &
 elif [ "$ACTION_HORIZON" = "10" ]; then
     echo "Starting background process for horizon $ACTION_HORIZON (default): serve_policy.py --env=LIBERO"
     uv run scripts/serve_policy.py --env=LIBERO &

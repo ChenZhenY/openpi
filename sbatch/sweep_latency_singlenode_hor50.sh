@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=sweep_latency
-#SBATCH --output=/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/scripts/log/sweep_latency_%j.out
-#SBATCH --error=/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/scripts/log/sweep_latency_%j.err
+#SBATCH --output=scripts/log/sweep_latency_%j.out
+#SBATCH --error=scripts/log/sweep_latency_%j.err
 #SBATCH --partition=overcap
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -38,8 +38,6 @@ cleanup() {
 # Register the cleanup function to run on EXIT
 trap cleanup EXIT INT TERM
 
-cd /srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi
-
 # Start the background process based on action horizon
 source .venv/bin/activate
 
@@ -47,7 +45,7 @@ source .venv/bin/activate
 echo "Starting background process for horizon $ACTION_HORIZON (default): serve_policy.py --env=LIBERO"
 uv run scripts/serve_policy.py \
     policy:checkpoint --policy.config=pi05_libero_lora \
-    --policy.dir=/srv/rl2-lab/flash8/rbansal66/openpi/checkpoints/pi05_libero_lora/libero_lora_finetune_single_gpu/10000 &
+    --policy.dir=checkpoints/pi05_libero_lora/libero_lora_finetune_single_gpu/10000 &
 
 BACKGROUND_PID=$!
 echo "Background process started with PID: $BACKGROUND_PID"

@@ -73,7 +73,7 @@ DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
     ),
     EnvMode.LIBERO_REALTIME: Checkpoint(
         config="pi0_libero",
-        dir="/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/.cache/openpi/openpi-assets/checkpoints/pi0_libero_pytorch_dexmal",
+        dir=".cache/openpi/openpi-assets/checkpoints/pi0_libero_pytorch_dexmal",
     ),
 }
 

@@ -36,7 +36,7 @@ def test_n_inferences(policy, n, warmup=False):
 
 def test_triton():
     config = _config.get_config("pi0_libero")
-    checkpoint_dir = "/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/.cache/openpi/openpi-assets/checkpoints/pi0_libero_pytorch_dexmal"
+    checkpoint_dir = ".cache/openpi/openpi-assets/checkpoints/pi0_libero_pytorch_dexmal"
 
     print("Loading triton policy...")
     policy = policy_config.create_trained_policy(config, checkpoint_dir, use_triton_optimized=True)
@@ -52,7 +52,7 @@ def test_triton():
 def test_pytorch():
 
     config = _config.get_config("pi0_libero")
-    checkpoint_dir = "/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/.cache/openpi/openpi-assets/checkpoints/pi0_libero_pytorch_openpi"
+    checkpoint_dir = ".cache/openpi/openpi-assets/checkpoints/pi0_libero_pytorch_openpi"
 
     print("Loading openpi policy...")
     policy = policy_config.create_trained_policy(config, checkpoint_dir, use_triton_optimized=False)

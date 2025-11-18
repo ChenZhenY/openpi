@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=sweep_latency
-#SBATCH --output=/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/scripts/log/sweep_latency_%j.out
-#SBATCH --error=/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/scripts/log/sweep_latency_%j.err
+#SBATCH --output=scripts/log/sweep_latency_%j.out
+#SBATCH --error=scripts/log/sweep_latency_%j.err
 #SBATCH --partition=overcap
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -37,8 +37,6 @@ cleanup() {
 
 # Register the cleanup function to run on EXIT
 trap cleanup EXIT INT TERM
-
-cd /srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi
 
 # Start the background process based on action horizon
 source .venv/bin/activate
