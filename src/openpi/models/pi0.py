@@ -1,4 +1,5 @@
 import logging
+import time
 
 import einops
 import flax.nnx as nnx
@@ -216,33 +217,29 @@ class Pi0(_model.BaseModel):
 
         return jnp.mean(jnp.square(v_t - u_t), axis=-1)
 
-    @override
-    def sample_actions(
+    def prefill(
         self,
-        rng: at.KeyArrayLike,
-        observation: _model.Observation,
-        *,
-        num_steps: int | at.Int[at.Array, ""] = 10,
-        noise: at.Float[at.Array, "b ah ad"] | None = None,
-    ) -> _model.Actions:
-        observation = _model.preprocess_observation(None, observation, train=False)
-        # note that we use the convention more common in diffusion literature, where t=1 is noise and t=0 is the target
-        # distribution. yes, this is the opposite of the pi0 paper, and I'm sorry.
-        dt = -1.0 / num_steps
-        batch_size = observation.state.shape[0]
-        if noise is None:
-            noise = jax.random.normal(rng, (batch_size, self.action_horizon, self.action_dim))
+        prefix_tokens: at.Float[at.Array, "b s emb"],
+        prefix_attn_mask: at.Bool[at.Array, "b s"],
+        positions: at.Int[at.Array, "b s"],
+    ) -> tuple[at.Float[at.Array, "l b _t _k _h"], at.Float[at.Array, "l b _t _v _h"]]:
+        return self.PaliGemma.llm([prefix_tokens, None], mask=prefix_attn_mask, positions=positions)
 
-        # first fill KV cache with a forward pass of the prefix
-        prefix_tokens, prefix_mask, prefix_ar_mask = self.embed_prefix(observation)
-        prefix_attn_mask = make_attn_mask(prefix_mask, prefix_ar_mask)
-        positions = jnp.cumsum(prefix_mask, axis=1) - 1
-        _, kv_cache = self.PaliGemma.llm([prefix_tokens, None], mask=prefix_attn_mask, positions=positions)
+    def flow_matching(
+        self,
+        observation: _model.Observation,
+        noise: at.Float[at.Array, "b ah ad"],
+        kv_cache: tuple[at.Float[at.Array, "l b _t _k _h"], at.Float[at.Array, "l b _t _v _h"]],
+        dt: float,
+        prefix_tokens: at.Float[at.Array, "b s emb"],
+        prefix_mask: at.Bool[at.Array, "b s"],
+    ) -> _model.Actions:
+        batch_size = observation.state.shape[0]
 
         def step(carry):
             x_t, time = carry
             suffix_tokens, suffix_mask, suffix_ar_mask, adarms_cond = self.embed_suffix(
-                observation, x_t, jnp.broadcast_to(time, batch_size)
+                observation, x_t, jnp.broadcast_to(time, (batch_size,))
             )
             # `suffix_attn_mask` is shape (b, suffix_len, suffix_len) indicating how the suffix tokens can attend to each
             # other
@@ -414,3 +411,56 @@ class Pi0(_model.BaseModel):
     def save_data(self) -> None:
         with open('/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/save_data/output_actions_float32_save.pkl', 'wb') as f:
             pickle.dump(self.output_actions_save, f)
+    
+    @override
+    def sample_actions(
+        self,
+        rng: at.KeyArrayLike,
+        observation: _model.Observation,
+        *,
+        num_steps: int = 10,
+        noise: at.Float[at.Array, "b ah ad"] | None = None,
+    ) -> tuple[_model.Actions, dict[str, float]]:
+        times = {}
+        start = time.monotonic()
+        observation = _model.preprocess_observation(None, observation, train=False)
+        observation = jax.block_until_ready(observation)
+        times["preprocess"] = time.monotonic() - start
+
+        # first fill KV cache with a forward pass of the prefix
+        start = time.monotonic()
+        prefix_tokens, prefix_mask, prefix_ar_mask = self.embed_prefix(observation)
+        prefix_tokens, prefix_mask, prefix_ar_mask = jax.block_until_ready((prefix_tokens, prefix_mask, prefix_ar_mask))
+        times["embed_prefix"] = time.monotonic() - start
+
+        start = time.monotonic()
+        prefix_attn_mask = make_attn_mask(prefix_mask, prefix_ar_mask)
+        positions = jnp.cumsum(prefix_mask, axis=1) - 1
+        prefix_attn_mask, positions = jax.block_until_ready((prefix_attn_mask, positions))
+        # note that we use the convention more common in diffusion literature, where t=1 is noise and t=0 is the target
+        # distribution. yes, this is the opposite of the pi0 paper, and I'm sorry.
+        dt = -1.0 / num_steps
+        batch_size = observation.state.shape[0]
+        if noise is None:
+            noise = jax.random.normal(rng, (batch_size, self.action_horizon, self.action_dim))
+        noise = jax.block_until_ready(noise)
+        times["overhead"] = time.monotonic() - start
+
+        start = time.monotonic()
+        _, kv_cache = self.prefill(prefix_tokens, prefix_attn_mask, positions)
+        kv_cache = jax.block_until_ready(kv_cache)
+        times["prefill"] = time.monotonic() - start
+
+        start = time.monotonic()
+        x_0 = self.flow_matching(
+            observation,
+            noise,
+            kv_cache,
+            dt,
+            prefix_tokens,
+            prefix_mask,
+        )
+        x_0 = jax.block_until_ready(x_0)
+        times["flow_matching"] = time.monotonic() - start
+
+        return x_0, times

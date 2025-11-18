@@ -69,8 +69,8 @@ for REQUEST_RATE in ${REQUEST_RATES[@]}; do
         --env libero \
         --num-requests 300 \
         --request-rate $REQUEST_RATE \
-        --max-concurrency 100 \
+        --max-concurrency 300 \
         --metric-percentiles 95,99 \
         --save-result \
-        --save-result-dir benchmarks/latency_batching/realtime_fake_batch
+        --save-result-dir benchmarks/latency_batching_300
 done

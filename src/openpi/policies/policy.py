@@ -72,12 +72,15 @@ class Policy(BasePolicy):
         if self._is_pytorch_model:
             self._model = self._model.to(pytorch_device)
             self._model.eval()
-            self._sample_actions = model.sample_actions
         else:
             # JAX model setup
-            self._sample_actions = nnx_utils.module_jit(model.sample_actions)
-            self._guided_inference = nnx_utils.module_jit(model.guided_inference)
+
             self._rng = rng or jax.random.key(0)
+            self._model.embed_prefix = nnx_utils.module_jit(self._model.embed_prefix)
+            self._model.prefill = nnx_utils.module_jit(self._model.prefill)
+            self._model.flow_matching = nnx_utils.module_jit(self._model.flow_matching)
+            self._guided_inference = nnx_utils.module_jit(model.guided_inference)
+        self._sample_actions = model.sample_actions
 
     @override
     def infer(self, obs: dict, *, prev_action: np.ndarray | None = None, use_rtc: bool = False, noise: np.ndarray | None = None, s_param: int = 5, d_param: int = 4) -> dict:  # type: ignore[misc]
@@ -117,35 +120,55 @@ class Policy(BasePolicy):
 
         observation = _model.Observation.from_dict(inputs)
         start_time = time.monotonic()
+        times: dict[str, float] = {}
+
         if use_rtc:
             if prev_action is None:
-                origin_actions = self._sample_actions(sample_rng_or_pytorch_device, _model.Observation.from_dict(inputs), **self._sample_kwargs)
-                outputs = {
-                    "state": inputs["state"],
-                    "actions": origin_actions,
-                    "origin_actions": origin_actions,
-                }
+                # First RTC call: fall back to normal sampling (but with RTC parameters).
+                origin_actions, times = self._sample_actions(
+                    sample_rng_or_pytorch_device,
+                    observation,
+                    **self._sample_kwargs,
+                )
             else:
+                # Subsequent RTC call: use guided_inference. This API returns only actions,
+                # so we construct a simple timing dict here.
                 prev_action = jnp.asarray(prev_action)[np.newaxis, ...]  # Add batch dimension
-                origin_actions = self._guided_inference(sample_rng_or_pytorch_device, prev_action, _model.Observation.from_dict(inputs), **self._sample_kwargs)
-                outputs = {
-                    "state": inputs["state"],
-                    "actions": origin_actions,
-                    "origin_actions": origin_actions,
-                }
-        else:
-            origin_actions = self._sample_actions(sample_rng_or_pytorch_device, _model.Observation.from_dict(inputs), **self._sample_kwargs)
+                guided_start = time.monotonic()
+                origin_actions = self._guided_inference(
+                    sample_rng_or_pytorch_device,
+                    prev_action,
+                    observation,
+                    **self._sample_kwargs,
+                )
+                times["guided_inference"] = time.monotonic() - guided_start
+
             outputs = {
                 "state": inputs["state"],
                 "actions": origin_actions,
                 "origin_actions": origin_actions,
             }
+        else:
+            # Non-RTC path: standard sampling with full sample_kwargs (including s/d/noise).
+            origin_actions, times = self._sample_actions(
+                sample_rng_or_pytorch_device,
+                observation,
+                **self._sample_kwargs,
+            )
+            outputs = {
+                "state": inputs["state"],
+                "actions": origin_actions,
+                "origin_actions": origin_actions,
+            }
+
+        # Ensure we always record a total inference time.
+        times.setdefault("infer_total", time.monotonic() - start_time)
         
         # Collect data for JAX models (after JIT execution)
         if not self._is_pytorch_model and hasattr(self._model, 'output_actions_save'):
             self._model.output_actions_save.append(origin_actions)
             
-        model_time = time.monotonic() - start_time
+
         if self._is_pytorch_model:
             outputs = jax.tree.map(
                 lambda x: np.asarray(x[0, ...].detach().cpu()), outputs
@@ -154,9 +177,7 @@ class Policy(BasePolicy):
             outputs = jax.tree.map(lambda x: np.asarray(x[0, ...]), outputs)
 
         outputs = self._output_transform(outputs)
-        outputs["policy_timing"] = {
-            "infer_ms": model_time * 1000,
-        }
+        outputs["policy_timing"] = times
         return outputs
 
     def infer_batch(
@@ -164,17 +185,57 @@ class Policy(BasePolicy):
     ) -> list[dict]:
         """Run inference on a batch of observations.
 
+        This supports two input formats:
+        1. Raw observation dicts expected by the model.
+        2. Websocket envelopes containing:
+           {"observation": obs, "prev_action": ..., "use_rtc": ..., "s_param": ..., "d_param": ...}
+
+        In case (2) we delegate to `infer` per-example so that RTC / guided_inference
+        behavior matches the single-sample path.
+
         Args:
-            obs_batch: List of observation dictionaries
+            obs_batch: List of observation dictionaries or websocket-style envelopes.
             noise: Optional noise tensor for batch (shape: batch_size, action_horizon, action_dim)
 
         Returns:
-            List of result dictionaries, one for each input observation
+            List of result dictionaries, one for each input observation.
         """
         if not obs_batch:
             return []
 
-        # Check if all observations have the same structure
+        # If inputs look like websocket envelopes (with prev_action / use_rtc / s_param / d_param),
+        # use the per-example infer() path so that guided_inference and RTC semantics are respected.
+        envelope_keys = {"observation", "prev_action", "use_rtc", "s_param", "d_param"}
+        has_envelope_like = any(
+            isinstance(obs, dict) and any(k in obs for k in envelope_keys)
+            for obs in obs_batch
+        )
+
+        if has_envelope_like:
+            results: list[dict] = []
+            for obs in obs_batch:
+                # Handle both pure observation dicts and websocket-style envelopes.
+                if isinstance(obs, dict) and "observation" in obs:
+                    inner_obs = obs["observation"]
+                    prev_action = obs.get("prev_action", None)
+                    use_rtc = obs.get("use_rtc", False)
+                    s_param = obs.get("s_param", 5)
+                    d_param = obs.get("d_param", 4)
+                    res = self.infer(
+                        inner_obs,
+                        prev_action=prev_action,
+                        use_rtc=use_rtc,
+                        noise=None,
+                        s_param=s_param,
+                        d_param=d_param,
+                    )
+                else:
+                    # Fallback: treat as raw observation dict with default non-RTC settings.
+                    res = self.infer(obs)
+                results.append(res)
+            return results
+
+        # Fast batched path for plain observation dicts (non-RTC).
         first_obs = obs_batch[0]
         batch_size = len(obs_batch)
 
@@ -227,13 +288,14 @@ class Policy(BasePolicy):
 
         observation = _model.Observation.from_dict(inputs)
         start_time = time.monotonic()
+        actions, times = self._sample_actions(
+            sample_rng_or_pytorch_device, observation, **sample_kwargs
+        )
+        times["infer_total"] = time.monotonic() - start_time
         outputs = {
             "state": inputs["state"],
-            "actions": self._sample_actions(
-                sample_rng_or_pytorch_device, observation, **sample_kwargs
-            ),
+            "actions": actions,
         }
-        model_time = time.monotonic() - start_time
 
         if self._is_pytorch_model:
             outputs = jax.tree.map(lambda x: np.asarray(x.detach().cpu()), outputs)
@@ -241,6 +303,7 @@ class Policy(BasePolicy):
             outputs = jax.tree.map(lambda x: np.asarray(x), outputs)
 
         outputs = self._output_transform(outputs)
+        outputs["policy_timing"] = times
 
         # Split batch results back into individual results
         results = []
