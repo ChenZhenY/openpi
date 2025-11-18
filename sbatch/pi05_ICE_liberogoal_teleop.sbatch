@@ -25,8 +25,8 @@ export XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 # train with 95% of GPU memory
 #     --batch-size=128
 
 uv run scripts/train.py \
-    pi05_libero_cotraining_interpolation \
-    --exp-name=liberogoal_pi_libero_cotraining_interpolation \
+    pi05_libero_cotraining_interpolation_clip_to_action_chunk_1115 \
+    --exp-name=liberogoal_pi_libero_cotraining_interpolation_clip_to_action_chunk \
     --fsdp-devices=4 \
     --batch-size=128 \
     --resume
