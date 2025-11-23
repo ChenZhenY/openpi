@@ -1,6 +1,8 @@
 # Data directories.
 assets/
 checkpoints/
+checkpoints_prev/
+checkpoints_cedar/
 data/
 wandb/
 
