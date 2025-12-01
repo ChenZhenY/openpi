@@ -1,12 +1,11 @@
 import asyncio
+from collections.abc import Callable
 import http
 import logging
 import multiprocessing as mp
 import traceback
-import uuid
 from typing import Any
-
-from collections.abc import Callable
+import uuid
 
 from openpi_client import msgpack_numpy
 import websockets.asyncio.server as _server

@@ -4,7 +4,6 @@ import logging
 import platform
 from typing import Any
 
-
 import etils.epath as epath
 import flax.nnx as nnx
 from flax.training import common_utils
