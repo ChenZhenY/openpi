@@ -49,6 +49,11 @@ class Args:
     # Batch size to use for inference.
     batch_size: int = 1
 
+    # Timeout (in milliseconds) to wait after the first request in a batch
+    # for additional requests before running inference. A value of 0 disables
+    # waiting and processes whatever is available immediately.
+    batch_timeout_ms: int = 0
+
     # Number of steps to use for sampling.
     num_steps: int = 10
 
@@ -137,6 +142,7 @@ def main(args: Args) -> None:
     policy_metadata["action_horizon"] = train_config.model.action_horizon
     policy_metadata["env"] = args.env.value
     policy_metadata["batch_size"] = args.batch_size
+    policy_metadata["batch_timeout_ms"] = args.batch_timeout_ms
 
     hostname = socket.gethostname()
     local_ip = socket.gethostbyname(hostname)
@@ -148,6 +154,7 @@ def main(args: Args) -> None:
         port=args.port,
         metadata=policy_metadata,
         batch_size=args.batch_size,
+        batch_timeout_ms=args.batch_timeout_ms,
     )
     server.serve_forever()
 
