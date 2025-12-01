@@ -314,7 +314,7 @@ class Pi0FAST(_model.BaseModel):
 
     def save_data(self) -> None:
         """Save collected data (placeholder for JAX model).
-        
+
         This method is a placeholder for compatibility with the save_data interface.
         JAX models typically don't collect inference data like PyTorch models.
         Override this method in subclasses if data collection is needed.

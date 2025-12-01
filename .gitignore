@@ -176,5 +176,7 @@ policy_logs/
 credentials/
 secrets/
 
+# Outputs
 logs/
 log/
+benchmarks/

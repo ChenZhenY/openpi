@@ -12,7 +12,6 @@ from openpi.training import checkpoints as _checkpoints
 from openpi.training import config as _config
 import openpi.transforms as transforms
 
-
 # def create_trained_policy(
 #     train_config: _config.TrainConfig,
 #     checkpoint_dir: pathlib.Path | str,
@@ -49,6 +48,7 @@ import openpi.transforms as transforms
 #     weight_path = os.path.join(checkpoint_dir, "model.safetensors")
 #     is_pytorch = os.path.exists(weight_path)
 
+
 #     logging.info("Loading model...")
 #     if is_pytorch:
 #         model = train_config.model.load_pytorch(train_config, weight_path)
@@ -68,7 +68,7 @@ def create_trained_policy(
     num_views: int = 2,  # NEW PARAMETER
 ) -> _policy.Policy:
     """Create a policy from a trained checkpoint.
-    
+
     Args:
         ...existing args...
         use_triton_optimized: If True, uses the Triton-optimized Pi0Triton model
@@ -77,20 +77,18 @@ def create_trained_policy(
     """
     repack_transforms = repack_transforms or transforms.Group()
     checkpoint_dir = download.maybe_download(str(checkpoint_dir))
-    
+
     logging.info("Loading model...")
     if use_triton_optimized:
         # Load the Triton-optimized model
         from openpi.models import pi0_triton
+
         converted_checkpoint_path = os.path.join(checkpoint_dir, "converted_checkpoint.pkl")
         if not os.path.exists(converted_checkpoint_path):
             raise ValueError(
-                f"Converted checkpoint not found at {converted_checkpoint_path}. "
-                "Please run convert_from_jax.py first."
+                f"Converted checkpoint not found at {converted_checkpoint_path}. Please run convert_from_jax.py first."
             )
-        model = pi0_triton.Pi0Triton.from_converted_checkpoint(
-            train_config.model, converted_checkpoint_path, num_views
-        )
+        model = pi0_triton.Pi0Triton.from_converted_checkpoint(train_config.model, converted_checkpoint_path, num_views)
         is_pytorch = True
     elif os.path.exists(os.path.join(checkpoint_dir, "model.safetensors")):
         # Standard PyTorch model
@@ -102,7 +100,7 @@ def create_trained_policy(
         # JAX model
         model = train_config.model.load(_model.restore_params(checkpoint_dir / "params", dtype=jnp.bfloat16))
         is_pytorch = False
-        
+
     data_config = train_config.data.create(train_config.assets_dirs, train_config.model)
     if norm_stats is None:
         # We are loading the norm stats from the checkpoint instead of the config assets dir to make sure

@@ -29,15 +29,17 @@ class Args:
     host: str = "0.0.0.0"
     port: int = 8081
     resize_size: int = 224
-    action_horizon: int = 10  # Action horizon for ActionChunkBroker (matches Libero model config)
-    latency_ms: float = 0.0  # Artificial latency to inject during inference (in milliseconds)
+    action_horizon: int = (
+        10  # Action horizon for ActionChunkBroker (matches Libero model config)
+    )
+    latency_ms: float = (
+        0.0  # Artificial latency to inject during inference (in milliseconds)
+    )
 
     #################################################################################################################
     # LIBERO environment-specific parameters
     #################################################################################################################
-    task_suite_name: str = (
-        "libero_10"  # Task suite. Options: libero_spatial, libero_object, libero_goal, libero_10, libero_90
-    )
+    task_suite_name: str = "libero_10"  # Task suite. Options: libero_spatial, libero_object, libero_goal, libero_10, libero_90
     num_steps_wait: int = 10  # Number of steps to wait for objects to stabilize i n sim
     num_trials_per_task: int = 20  # Number of rollouts per task
 
@@ -64,15 +66,24 @@ def eval_libero(args: Args) -> None:
 
     # Create timestamped output directories to avoid overwriting old data
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    timestamp_folder = f"{timestamp}_rtc{args.use_rtc}_lat{args.latency_ms}_hrzn{args.action_horizon}"
+    timestamp_folder = (
+        f"{timestamp}_rtc{args.use_rtc}_lat{args.latency_ms}_hrzn{args.action_horizon}"
+    )
     horizon_folder = f"horizon_{args.action_horizon}"
-    
-    video_out_path_with_horizon = pathlib.Path(args.video_out_path) / timestamp_folder / horizon_folder
-    results_csv_path_with_horizon = pathlib.Path(args.results_csv_path).parent / timestamp_folder / horizon_folder / pathlib.Path(args.results_csv_path).name
-    
+
+    video_out_path_with_horizon = (
+        pathlib.Path(args.video_out_path) / timestamp_folder / horizon_folder
+    )
+    results_csv_path_with_horizon = (
+        pathlib.Path(args.results_csv_path).parent
+        / timestamp_folder
+        / horizon_folder
+        / pathlib.Path(args.results_csv_path).name
+    )
+
     video_out_path_with_horizon.mkdir(parents=True, exist_ok=True)
     results_csv_path_with_horizon.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # Log output paths
     logging.info(f"Videos will be saved to: {video_out_path_with_horizon}")
     logging.info(f"Results will be saved to: {results_csv_path_with_horizon}")
@@ -110,7 +121,9 @@ def eval_libero(args: Args) -> None:
     else:
         raise ValueError(f"Unknown action horizon: {args.action_horizon}")
 
-    ws_client = _websocket_client_policy.WebsocketClientPolicy(args.host, args.port, latency_ms=args.latency_ms)
+    ws_client = _websocket_client_policy.WebsocketClientPolicy(
+        args.host, args.port, latency_ms=args.latency_ms
+    )
     client = action_chunk_broker.ActionChunkBroker(
         policy=ws_client,
         action_horizon=args.action_horizon,
@@ -119,7 +132,16 @@ def eval_libero(args: Args) -> None:
         d=d,
     )
 
-    print("RTC setting: ", args.use_rtc, "action horizon: ", args.action_horizon, "s: ", s, "d: ", d)
+    print(
+        "RTC setting: ",
+        args.use_rtc,
+        "action horizon: ",
+        args.action_horizon,
+        "s: ",
+        s,
+        "d: ",
+        d,
+    )
 
     # Start evaluation
     total_episodes, total_successes = 0, 0
@@ -142,7 +164,7 @@ def eval_libero(args: Args) -> None:
 
             # Reset environment
             env.reset()
-            
+
             # Reset the action chunk broker for each episode
             client.reset()
 
@@ -155,7 +177,7 @@ def eval_libero(args: Args) -> None:
 
             last_gripper = -1.0
 
-            logging.info(f"Starting episode {task_episodes+1}...")
+            logging.info(f"Starting episode {task_episodes + 1}...")
             while t < max_steps + args.num_steps_wait:
                 try:
                     # IMPORTANT: Do nothing for the first few timesteps because the simulator drops objects
@@ -168,12 +190,18 @@ def eval_libero(args: Args) -> None:
                     # Get preprocessed image
                     # IMPORTANT: rotate 180 degrees to match train preprocessing
                     img = np.ascontiguousarray(obs["agentview_image"][::-1, ::-1])
-                    wrist_img = np.ascontiguousarray(obs["robot0_eye_in_hand_image"][::-1, ::-1])
+                    wrist_img = np.ascontiguousarray(
+                        obs["robot0_eye_in_hand_image"][::-1, ::-1]
+                    )
                     img = image_tools.convert_to_uint8(
-                        image_tools.resize_with_pad(img, args.resize_size, args.resize_size)
+                        image_tools.resize_with_pad(
+                            img, args.resize_size, args.resize_size
+                        )
                     )
                     wrist_img = image_tools.convert_to_uint8(
-                        image_tools.resize_with_pad(wrist_img, args.resize_size, args.resize_size)
+                        image_tools.resize_with_pad(
+                            wrist_img, args.resize_size, args.resize_size
+                        )
                     )
 
                     # Save preprocessed image for replay video
@@ -199,13 +227,17 @@ def eval_libero(args: Args) -> None:
 
                     # Calculate additional delay needed
                     target_latency_seconds = args.latency_ms / 1000.0
-                    additional_delay = max(0, target_latency_seconds - actual_inference_time)
+                    additional_delay = max(
+                        0, target_latency_seconds - actual_inference_time
+                    )
 
                     # Simulate the additional delay by repeating last action
                     if additional_delay > 0:
                         delay_steps = int(additional_delay / 0.05)  # Assuming 20Hz
                         for _ in range(delay_steps):
-                            obs, reward, done, info = env.step([0.0] * 6 + [last_gripper])
+                            obs, reward, done, info = env.step(
+                                [0.0] * 6 + [last_gripper]
+                            )
                             t += 1
                             if done or t >= max_steps:
                                 break
@@ -228,24 +260,25 @@ def eval_libero(args: Args) -> None:
 
             # Record episode results
             episode_result = {
-                'task_id': task_id,
-                'task_description': task_description,
-                'episode_idx': episode_idx,
-                'success': bool(done),
-                'steps_taken': t,
-                'max_steps': max_steps + args.num_steps_wait,
-                'task_suite': args.task_suite_name,
-                'seed': args.seed,
-                'use_rtc': args.use_rtc,
-                'action_horizon': args.action_horizon
+                "task_id": task_id,
+                "task_description": task_description,
+                "episode_idx": episode_idx,
+                "success": bool(done),
+                "steps_taken": t,
+                "max_steps": max_steps + args.num_steps_wait,
+                "task_suite": args.task_suite_name,
+                "seed": args.seed,
+                "use_rtc": args.use_rtc,
+                "action_horizon": args.action_horizon,
             }
             results_data.append(episode_result)
 
             # Save a replay video of the episode
             suffix = "succ" if done else "fail"
-            task_segment = task_description.replace(" ", "_")
+            # task_segment = task_description.replace(" ", "_")
             imageio.mimwrite(
-                video_out_path_with_horizon / f"task_{task_id}_ep{episode_idx}_rtc{args.use_rtc}_hrzn{args.action_horizon}_{suffix}.mp4",
+                video_out_path_with_horizon
+                / f"task_{task_id}_ep{episode_idx}_rtc{args.use_rtc}_hrzn{args.action_horizon}_{suffix}.mp4",
                 [np.asarray(x) for x in replay_images],
                 fps=10,
             )
@@ -253,81 +286,101 @@ def eval_libero(args: Args) -> None:
             # Log current results
             logging.info(f"Success: {done}")
             logging.info(f"# episodes completed so far: {total_episodes}")
-            logging.info(f"# successes: {total_successes} ({total_successes / total_episodes * 100:.1f}%)")
+            logging.info(
+                f"# successes: {total_successes} ({total_successes / total_episodes * 100:.1f}%)"
+            )
 
         # Log final results
-        logging.info(f"Current task success rate: {float(task_successes) / float(task_episodes)}")
-        logging.info(f"Current total success rate: {float(total_successes) / float(total_episodes)}")
+        logging.info(
+            f"Current task success rate: {float(task_successes) / float(task_episodes)}"
+        )
+        logging.info(
+            f"Current total success rate: {float(total_successes) / float(total_episodes)}"
+        )
 
-    logging.info(f"Total success rate: {float(total_successes) / float(total_episodes)}")
+    logging.info(
+        f"Total success rate: {float(total_successes) / float(total_episodes)}"
+    )
     logging.info(f"Total episodes: {total_episodes}")
 
     # Save results to CSV
     if results_data:
         fieldnames = results_data[0].keys()
-        with open(results_csv_path_with_horizon, 'w', newline='') as csvfile:
+        with open(results_csv_path_with_horizon, "w", newline="") as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(results_data)
-        
+
         logging.info(f"Results saved to: {results_csv_path_with_horizon}")
-        
+
         # Calculate and save summary statistics
-        summary_csv_path = str(results_csv_path_with_horizon).replace('.csv', '_summary.csv')
+        summary_csv_path = str(results_csv_path_with_horizon).replace(
+            ".csv", "_summary.csv"
+        )
         task_summaries = []
-        
+
         # Calculate per-task success rates
         for task_id in range(num_tasks_in_suite):
-            task_results = [r for r in results_data if r['task_id'] == task_id]
+            task_results = [r for r in results_data if r["task_id"] == task_id]
             if task_results:
-                task_successes = sum(1 for r in task_results if r['success'])
+                task_successes = sum(1 for r in task_results if r["success"])
                 task_episodes = len(task_results)
                 task_success_rate = task_successes / task_episodes
-                
+
                 task_summary = {
-                    'task_id': task_id,
-                    'task_description': task_results[0]['task_description'],
-                    'total_episodes': task_episodes,
-                    'successes': task_successes,
-                    'success_rate': task_success_rate,
-                    'task_suite': args.task_suite_name,
-                    'seed': args.seed,
-                    'use_rtc': args.use_rtc,
-                    'action_horizon': args.action_horizon
+                    "task_id": task_id,
+                    "task_description": task_results[0]["task_description"],
+                    "total_episodes": task_episodes,
+                    "successes": task_successes,
+                    "success_rate": task_success_rate,
+                    "task_suite": args.task_suite_name,
+                    "seed": args.seed,
+                    "use_rtc": args.use_rtc,
+                    "action_horizon": args.action_horizon,
                 }
                 task_summaries.append(task_summary)
-        
+
         # Add overall summary
         overall_summary = {
-            'task_id': 'OVERALL',
-            'task_description': 'All tasks combined',
-            'total_episodes': total_episodes,
-            'successes': total_successes,
-            'success_rate': total_successes / total_episodes,
-            'task_suite': args.task_suite_name,
-            'seed': args.seed,
-            'use_rtc': args.use_rtc,
-            'action_horizon': args.action_horizon
+            "task_id": "OVERALL",
+            "task_description": "All tasks combined",
+            "total_episodes": total_episodes,
+            "successes": total_successes,
+            "success_rate": total_successes / total_episodes,
+            "task_suite": args.task_suite_name,
+            "seed": args.seed,
+            "use_rtc": args.use_rtc,
+            "action_horizon": args.action_horizon,
         }
         task_summaries.append(overall_summary)
-        
+
         # Save summary CSV
         if task_summaries:
-            with open(summary_csv_path, 'w', newline='') as csvfile:
+            with open(summary_csv_path, "w", newline="") as csvfile:
                 writer = csv.DictWriter(csvfile, fieldnames=task_summaries[0].keys())
                 writer.writeheader()
                 writer.writerows(task_summaries)
-            
+
             logging.info(f"Summary results saved to: {summary_csv_path}")
 
 
 def _get_libero_env(task, resolution, seed):
     """Initializes and returns the LIBERO environment, along with the task description."""
     task_description = task.language
-    task_bddl_file = pathlib.Path(get_libero_path("bddl_files")) / task.problem_folder / task.bddl_file
-    env_args = {"bddl_file_name": task_bddl_file, "camera_heights": resolution, "camera_widths": resolution}
+    task_bddl_file = (
+        pathlib.Path(get_libero_path("bddl_files"))
+        / task.problem_folder
+        / task.bddl_file
+    )
+    env_args = {
+        "bddl_file_name": task_bddl_file,
+        "camera_heights": resolution,
+        "camera_widths": resolution,
+    }
     env = OffScreenRenderEnv(**env_args)
-    env.seed(seed)  # IMPORTANT: seed seems to affect object positions even when using fixed initial state
+    env.seed(
+        seed
+    )  # IMPORTANT: seed seems to affect object positions even when using fixed initial state
     return env, task_description
 
 

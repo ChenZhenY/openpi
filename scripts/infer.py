@@ -1,7 +1,9 @@
 import argparse
+
 import jax
 
-from openpi.policies import policy_config, libero_policy
+from openpi.policies import libero_policy
+from openpi.policies import policy_config
 from openpi.shared import download
 from openpi.training import config as _config
 
