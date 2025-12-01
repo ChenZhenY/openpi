@@ -21,7 +21,6 @@ from openpi_client import websocket_client_policy as _websocket_client_policy
 from openpi_client.runtime import environment as _environment
 from openpi_client.runtime import runtime as _runtime
 from openpi_client.runtime.agents import policy_agent as _policy_agent
-import tqdm
 import tyro
 
 try:
@@ -148,16 +147,12 @@ class LiberoSimEnvironment(_environment.Environment):
 
         # IMPORTANT: rotate 180 degrees to match train preprocessing
         img = np.ascontiguousarray(obs["agentview_image"][::-1, ::-1])
-        wrist_img = np.ascontiguousarray(
-            obs["robot0_eye_in_hand_image"][::-1, ::-1]
-        )
+        wrist_img = np.ascontiguousarray(obs["robot0_eye_in_hand_image"][::-1, ::-1])
         img = image_tools.convert_to_uint8(
             image_tools.resize_with_pad(img, self._resize_size, self._resize_size)
         )
         wrist_img = image_tools.convert_to_uint8(
-            image_tools.resize_with_pad(
-                wrist_img, self._resize_size, self._resize_size
-            )
+            image_tools.resize_with_pad(wrist_img, self._resize_size, self._resize_size)
         )
 
         # Record frame for video (use the main agentview image)
@@ -208,7 +203,9 @@ class LiberoSimEnvironment(_environment.Environment):
                 # Record a frame for each extra latency step so pauses show up in video
                 img = np.ascontiguousarray(obs["agentview_image"][::-1, ::-1])
                 img = image_tools.convert_to_uint8(
-                    image_tools.resize_with_pad(img, self._resize_size, self._resize_size)
+                    image_tools.resize_with_pad(
+                        img, self._resize_size, self._resize_size
+                    )
                 )
                 self._current_frames.append(img)
 
@@ -241,7 +238,9 @@ class Args:
     host: str = "0.0.0.0"
     port: int = 8080
     resize_size: int = 224
-    action_horizon: int = 10  # Action horizon for ActionChunkBroker (matches Libero model config)
+    action_horizon: int = (
+        10  # Action horizon for ActionChunkBroker (matches Libero model config)
+    )
     latency_ms: list[float] = dataclasses.field(
         default_factory=list
     )  # Optional per-robot artificial latency (ms); length <= num_robots
@@ -274,12 +273,16 @@ class Args:
     video_out_path: str = "data/libero/multi_robot_videos"
 
 
-def _partition_initial_states(initial_states: np.ndarray, num_parts: int) -> List[np.ndarray]:
+def _partition_initial_states(
+    initial_states: np.ndarray, num_parts: int
+) -> List[np.ndarray]:
     """Partition initial states into num_parts slices (round-robin)."""
     parts: list[list[np.ndarray]] = [[] for _ in range(num_parts)]
     for idx, state in enumerate(initial_states):
         parts[idx % num_parts].append(state)
-    return [np.stack(p) if p else np.empty((0,) + initial_states.shape[1:]) for p in parts]
+    return [
+        np.stack(p) if p else np.empty((0,) + initial_states.shape[1:]) for p in parts
+    ]
 
 
 def _latency_for_robot(args: Args, robot_idx: int) -> float:
@@ -426,9 +429,9 @@ def main(args: Args) -> None:
                 initial_states=init_states_robot,
                 resize_size=args.resize_size,
                 num_steps_wait=args.num_steps_wait,
-            max_episode_steps=args.max_steps,
-            latency_ms=_latency_for_robot(args, robot_idx),
-            control_hz=args.control_hz,
+                max_episode_steps=args.max_steps,
+                latency_ms=_latency_for_robot(args, robot_idx),
+                control_hz=args.control_hz,
             )
 
             # Create policy agent for this robot (with optional per-robot latency)
@@ -471,7 +474,9 @@ def main(args: Args) -> None:
         # Aggregate per-task stats
         task_episodes = sum(r["episodes"] for r in task_results)
         task_successes = sum(r["successes"] for r in task_results)
-        task_success_rate = (task_successes / task_episodes) if task_episodes > 0 else 0.0
+        task_success_rate = (
+            (task_successes / task_episodes) if task_episodes > 0 else 0.0
+        )
 
         logging.info(
             "Task %d complete: episodes=%d, successes=%d (%.1f%%)",
@@ -495,7 +500,7 @@ def main(args: Args) -> None:
                 for ep_idx, ep_frames in enumerate(env.episode_frames):
                     if not ep_frames:
                         continue
-                    start_idx = len(frames_flat)
+
                     for frame in ep_frames:
                         frames_flat.append(frame)
                         episode_ids_flat.append(ep_idx)
@@ -565,7 +570,9 @@ def main(args: Args) -> None:
 
                                 # Map from local index to global robot index and latency
                                 robot_idx_global = robot_indices[r_idx]
-                                latency_for_robot = _latency_for_robot(args, robot_idx_global)
+                                latency_for_robot = _latency_for_robot(
+                                    args, robot_idx_global
+                                )
 
                                 # Episode success flag, if available
                                 env = robot_envs[r_idx]
@@ -599,9 +606,14 @@ def main(args: Args) -> None:
                                 if success_flag is not None and ep_id < len(
                                     per_robot_episode_last_indices[r_idx]
                                 ):
-                                    last_idx_for_ep = per_robot_episode_last_indices[r_idx][ep_id]
+                                    last_idx_for_ep = per_robot_episode_last_indices[
+                                        r_idx
+                                    ][ep_id]
                                     # Highlight on the last few frames of the episode
-                                    if t_idx >= last_idx_for_ep - 4 and t_idx <= last_idx_for_ep:
+                                    if (
+                                        t_idx >= last_idx_for_ep - 4
+                                        and t_idx <= last_idx_for_ep
+                                    ):
                                         border_color = (
                                             (0, 255, 0) if success_flag else (255, 0, 0)
                                         )
@@ -642,10 +654,7 @@ def main(args: Args) -> None:
                         matrix_frames.append(canvas)
 
                     # Ensure output directory exists
-                    out_dir = (
-                        pathlib.Path(args.video_out_path)
-                        / args.task_suite_name
-                    )
+                    out_dir = pathlib.Path(args.video_out_path) / args.task_suite_name
                     out_dir.mkdir(parents=True, exist_ok=True)
                     out_path = out_dir / f"task_{task_id}_matrix.mp4"
 
@@ -654,13 +663,12 @@ def main(args: Args) -> None:
                         [np.asarray(x) for x in matrix_frames],
                         fps=10,
                     )
-                    logging.info("Saved matrix video for task %d to %s", task_id, out_path)
+                    logging.info(
+                        "Saved matrix video for task %d to %s", task_id, out_path
+                    )
 
             # Save JSON results for this task
-            out_dir_json = (
-                pathlib.Path(args.video_out_path)
-                / args.task_suite_name
-            )
+            out_dir_json = pathlib.Path(args.video_out_path) / args.task_suite_name
             out_dir_json.mkdir(parents=True, exist_ok=True)
             json_path = out_dir_json / f"task_{task_id}_results.json"
 
@@ -715,7 +723,9 @@ def main(args: Args) -> None:
     # Aggregate global stats across all tasks
     total_episodes = sum(r["episodes"] for r in global_results)
     total_successes = sum(r["successes"] for r in global_results)
-    total_success_rate = (total_successes / total_episodes) if total_episodes > 0 else 0.0
+    total_success_rate = (
+        (total_successes / total_episodes) if total_episodes > 0 else 0.0
+    )
 
     logging.info("=== Multi-robot LIBERO evaluation over entire suite complete ===")
     logging.info(
@@ -729,5 +739,3 @@ def main(args: Args) -> None:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, force=True)
     main(tyro.cli(Args))
-
-
