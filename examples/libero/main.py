@@ -200,7 +200,6 @@ def eval_libero(args: Args) -> None:
 
             # Apply visualization overlay to frames
             if args.visualize_chunks:
-                logging.info("Applying action chunk visualization to frames...")
                 visualized_frames = visualize.add_action_chunk_visualization(
                     replay_images,
                     frame_metadata,

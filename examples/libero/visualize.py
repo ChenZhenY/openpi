@@ -55,7 +55,7 @@ def add_action_chunk_visualization(
     time_window: int = 10,
     action_width: int = 18,
     action_spacing: int = 2,
-    viz_height: int = 120,
+    viz_height: int = 128,
 ) -> List[np.ndarray]:
     """
     Add action chunk timeline visualization below video frames.
@@ -144,13 +144,14 @@ def add_action_chunk_visualization(
             if previous_chunk_end >= time_min:
                 chunks_to_draw.append((previous_chunk_id, previous_chunk_start))
 
-        # Sort so previous is on top, current at bottom
-        chunks_to_draw.sort(key=lambda x: x[0])
-
         # Draw each chunk
-        for row_idx, (chunk_id, chunk_start_time) in enumerate(chunks_to_draw):
+        for chunk_id, chunk_start_time in chunks_to_draw:
+            # Alternate between top and bottom based on chunk_id
+            # Even chunks at bottom (row 0), odd chunks at top (row 1)
+            row_position = chunk_id % 2
+
             # Calculate vertical position (bottom up)
-            chunk_y = h + viz_height - 10 - (row_idx + 1) * (chunk_row_height + 5)
+            chunk_y = h + viz_height - 10 - (row_position + 1) * (chunk_row_height + 5)
             if chunk_y < viz_y_start:
                 break
 
