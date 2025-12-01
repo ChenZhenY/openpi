@@ -21,15 +21,13 @@ def _parse_image(image) -> np.ndarray:
     image = np.asarray(image)
     if np.issubdtype(image.dtype, np.floating):
         image = (255 * image).astype(np.uint8)
-    
+
     # Handle both single images and batch of images
-    if len(image.shape) == 4:  # Batch of images: (batch, c, h, w)
-        if image.shape[1] == 3:  # Channel dimension is at index 1
-            image = einops.rearrange(image, "b c h w -> b h w c")
-    elif len(image.shape) == 3:  # Single image: (c, h, w)
-        if image.shape[0] == 3:  # Channel dimension is at index 0
-            image = einops.rearrange(image, "c h w -> h w c")
-    
+    if len(image.shape) == 4 and image.shape[1] == 3:  # Batch of images: (batch, c, h, w)
+        image = einops.rearrange(image, "b c h w -> b h w c")
+    elif len(image.shape) == 3 and image.shape[0] == 3:  # Single image: (c, h, w)
+        image = einops.rearrange(image, "c h w -> h w c")
+
     return image
 
 
@@ -67,13 +65,17 @@ class LiberoInputs(transforms.DataTransformFn):
         # Handle batch dimensions for state and masks
         state = data["observation/state"]
         is_batch = len(state.shape) > 1
-        
+
         if is_batch:
             # Batch processing: create appropriate masks for each sample in batch
             batch_size = state.shape[0]
             base_mask = np.ones(batch_size, dtype=bool)
             wrist_mask = np.ones(batch_size, dtype=bool)
-            right_wrist_mask = np.ones(batch_size, dtype=bool) if self.model_type == _model.ModelType.PI0_FAST else np.zeros(batch_size, dtype=bool)
+            right_wrist_mask = (
+                np.ones(batch_size, dtype=bool)
+                if self.model_type == _model.ModelType.PI0_FAST
+                else np.zeros(batch_size, dtype=bool)
+            )
         else:
             # Single sample processing (original behavior)
             base_mask = np.True_
@@ -132,12 +134,11 @@ class LiberoOutputs(transforms.DataTransformFn):
         if len(actions.shape) == 3:  # Batch: (batch_size, action_horizon, action_dim)
             # Keep full horizon, slice action dim
             return {"actions": actions[:, :, :7]}
-        elif len(actions.shape) == 2:  # Single: (action_horizon, action_dim)
+        if len(actions.shape) == 2:  # Single: (action_horizon, action_dim)
             # Keep full horizon, slice action dim
             return {
                 "actions": np.asarray(data["actions"][:, :7]),
                 "state": data["state"],
                 "origin_actions": data["origin_actions"],
             }
-        else:
-            raise ValueError(f"Unexpected actions shape: {actions.shape}")
+        raise ValueError(f"Unexpected actions shape: {actions.shape}")

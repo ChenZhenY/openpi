@@ -1,4 +1,3 @@
-import collections
 import csv
 import dataclasses
 from datetime import datetime
@@ -11,7 +10,7 @@ import os
 import pathlib
 import threading
 import time
-from typing import Optional, Tuple, Union, List
+from typing import Optional, Tuple
 
 import imageio
 from libero.libero import benchmark
@@ -37,15 +36,17 @@ class Args:
     host: str = "0.0.0.0"
     port: int = 8080
     resize_size: int = 224
-    action_horizon: int = 10  # Action horizon for ActionChunkBroker (matches Libero model config)
-    latency_ms: Tuple[float, ...] = (0.0,)  # Artificial latency to inject during inference (in milliseconds). Can be a single float or list of floats.
+    action_horizon: int = (
+        10  # Action horizon for ActionChunkBroker (matches Libero model config)
+    )
+    latency_ms: Tuple[float, ...] = (
+        0.0,
+    )  # Artificial latency to inject during inference (in milliseconds). Can be a single float or list of floats.
 
     #################################################################################################################
     # LIBERO environment-specific parameters
     #################################################################################################################
-    task_suite_name: str = (
-        "libero_10"  # Task suite. Options: libero_spatial, libero_object, libero_goal, libero_10, libero_90
-    )
+    task_suite_name: str = "libero_10"  # Task suite. Options: libero_spatial, libero_object, libero_goal, libero_10, libero_90
     num_steps_wait: int = 10  # Number of steps to wait for objects to stabilize in sim
     num_trials_per_task: int = 20  # Number of rollouts per task
     num_workers: int = 6  # Number of parallel workers
@@ -78,7 +79,7 @@ def init_worker(task: Task, args: Args, status_dict, results_dict) -> None:
     _worker_env, _worker_task_description = _get_libero_env(
         task, LIBERO_ENV_RESOLUTION, args.seed
     )
-    
+
     # Determine s and d parameters based on action horizon
     s = None
     d = None
@@ -96,9 +97,11 @@ def init_worker(task: Task, args: Args, status_dict, results_dict) -> None:
         d = 6
     else:
         raise ValueError(f"Unknown action horizon: {args.action_horizon}")
-    
+
     # Initialize ActionChunkBroker with RTC support
-    ws_client = _websocket_client_policy.WebsocketClientPolicy(args.host, args.port, latency_ms=args.latency_ms)
+    ws_client = _websocket_client_policy.WebsocketClientPolicy(
+        args.host, args.port, latency_ms=args.latency_ms
+    )
     _worker_client = action_chunk_broker.ActionChunkBroker(
         policy=ws_client,
         action_horizon=args.action_horizon,
@@ -106,7 +109,7 @@ def init_worker(task: Task, args: Args, status_dict, results_dict) -> None:
         s=s,
         d=d,
     )
-    
+
     _worker_status_dict = status_dict
     _worker_results_dict = results_dict
     _worker_args = args
@@ -135,7 +138,7 @@ def eval_libero(
     assert _worker_status_dict is not None
     assert _worker_results_dict is not None
     assert _worker_args is not None
-    
+
     env = _worker_env
     client = _worker_client
     task_description = _worker_task_description
@@ -146,7 +149,7 @@ def eval_libero(
 
     # Reset environment
     env.reset()
-    
+
     # Reset the action chunk broker for each episode
     client.reset()
 
@@ -163,7 +166,7 @@ def eval_libero(
 
     inference_times = []
     additional_delay_times = []
-    
+
     while t < max_steps + args.num_steps_wait:
         try:
             # IMPORTANT: Do nothing for the first few timesteps because the simulator drops objects
@@ -178,12 +181,16 @@ def eval_libero(
             # IMPORTANT: rotate 180 degrees to match train preprocessing
             _worker_status_dict[pid] = f"ep{episode_idx}: t={t} preprocessing"
             img = np.ascontiguousarray(obs["agentview_image"][::-1, ::-1])
-            wrist_img = np.ascontiguousarray(obs["robot0_eye_in_hand_image"][::-1, ::-1])
+            wrist_img = np.ascontiguousarray(
+                obs["robot0_eye_in_hand_image"][::-1, ::-1]
+            )
             img = image_tools.convert_to_uint8(
                 image_tools.resize_with_pad(img, args.resize_size, args.resize_size)
             )
             wrist_img = image_tools.convert_to_uint8(
-                image_tools.resize_with_pad(wrist_img, args.resize_size, args.resize_size)
+                image_tools.resize_with_pad(
+                    wrist_img, args.resize_size, args.resize_size
+                )
             )
 
             # Prepare observations dict
@@ -247,9 +254,12 @@ def eval_libero(
     # Save video
     _worker_status_dict[pid] = f"ep{episode_idx}: saving video"
     suffix = "succ" if success else "fail"
-    task_segment = task_description.replace(" ", "_")
-    
-    video_filename = video_out_path / f"task_{task_id}_ep{episode_idx}_rtc{args.use_rtc}_hrzn{args.action_horizon}_{suffix}.mp4"
+    # task_segment = task_description.replace(" ", "_")
+
+    video_filename = (
+        video_out_path
+        / f"task_{task_id}_ep{episode_idx}_rtc{args.use_rtc}_hrzn{args.action_horizon}_{suffix}.mp4"
+    )
     imageio.mimwrite(
         video_filename,
         [np.asarray(x) for x in replay_images],
@@ -258,30 +268,31 @@ def eval_libero(
 
     # Prepare result dict
     episode_result = {
-        'task_id': task_id,
-        'task_description': task_description,
-        'episode_idx': episode_idx,
-        'success': bool(success),
-        'steps_taken': t,
-        'max_steps': max_steps + args.num_steps_wait,
-        'task_suite': args.task_suite_name,
-        'seed': args.seed,
-        'use_rtc': args.use_rtc,
-        'action_horizon': args.action_horizon,
-        'latency_ms': args.latency_ms,
-        'avg_inference_time': np.mean(inference_times),
-        'avg_additional_delay_time': np.mean(additional_delay_times)
+        "task_id": task_id,
+        "task_description": task_description,
+        "episode_idx": episode_idx,
+        "success": bool(success),
+        "steps_taken": t,
+        "max_steps": max_steps + args.num_steps_wait,
+        "task_suite": args.task_suite_name,
+        "seed": args.seed,
+        "use_rtc": args.use_rtc,
+        "action_horizon": args.action_horizon,
+        "latency_ms": args.latency_ms,
+        "avg_inference_time": np.mean(inference_times),
+        "avg_additional_delay_time": np.mean(additional_delay_times),
     }
 
     _worker_status_dict[pid] = f"ep{episode_idx}: done ({suffix})"
     _worker_results_dict[episode_idx] = success
-    
+
     return episode_result
 
 
 def _clear_lines(num_lines):
     """Move cursor up and clear lines."""
     import sys
+
     sys.stdout.write(f"\033[{num_lines}A")  # Move cursor up
     sys.stdout.write("\033[J")  # Clear from cursor to end
 
@@ -289,6 +300,7 @@ def _clear_lines(num_lines):
 def _print_worker_status(status_dict, num_workers):
     """Print worker status, one worker per line."""
     import sys
+
     statuses = list(status_dict.values())
     for i in range(num_workers):
         status = statuses[i] if i < len(statuses) else "idle"
@@ -310,22 +322,35 @@ def monitor_worker_status(status_dict, stop_event, num_workers):
         time.sleep(0.1)
 
 
-def run_experiment_for_latency(args: Args, latency_value: float, timestamp: str, task_suite, num_tasks_in_suite: int) -> None:
+def run_experiment_for_latency(
+    args: Args,
+    latency_value: float,
+    timestamp: str,
+    task_suite,
+    num_tasks_in_suite: int,
+) -> None:
     """Run the full experiment for a single latency value."""
     # Create timestamped output directories to avoid overwriting old data
     timestamp_folder = f"{timestamp}_rtc{args.use_rtc}_lat{latency_value}_hrzn{args.action_horizon}_parallel"
     horizon_folder = f"horizon_{args.action_horizon}"
-    
-    video_out_path_with_horizon = pathlib.Path(args.video_out_path) / timestamp_folder / horizon_folder
-    results_csv_path_with_horizon = pathlib.Path(args.results_csv_path).parent / timestamp_folder / horizon_folder / pathlib.Path(args.results_csv_path).name
-    
+
+    video_out_path_with_horizon = (
+        pathlib.Path(args.video_out_path) / timestamp_folder / horizon_folder
+    )
+    results_csv_path_with_horizon = (
+        pathlib.Path(args.results_csv_path).parent
+        / timestamp_folder
+        / horizon_folder
+        / pathlib.Path(args.results_csv_path).name
+    )
+
     video_out_path_with_horizon.mkdir(parents=True, exist_ok=True)
     results_csv_path_with_horizon.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # Log output paths
-    logging.info(f"=" * 80)
+    logging.info("=" * 80)
     logging.info(f"Running experiment with latency: {latency_value} ms")
-    logging.info(f"=" * 80)
+    logging.info("=" * 80)
     logging.info(f"Videos will be saved to: {video_out_path_with_horizon}")
     logging.info(f"Results will be saved to: {results_csv_path_with_horizon}")
     logging.info(f"Number of workers: {args.num_workers}")
@@ -334,7 +359,7 @@ def run_experiment_for_latency(args: Args, latency_value: float, timestamp: str,
     # Temporarily set args.latency_ms to the current latency value for workers
     original_latency = args.latency_ms
     args.latency_ms = latency_value
-    
+
     # Initialize results tracking
     all_results_data = []
 
@@ -355,12 +380,11 @@ def run_experiment_for_latency(args: Args, latency_value: float, timestamp: str,
 
     # Start evaluation
     total_episodes, total_successes = 0, 0
-    
-    for task_id in tqdm.tqdm(range(num_tasks_in_suite)):
 
+    for task_id in tqdm.tqdm(range(num_tasks_in_suite)):
         if task_id != 8:
             continue
-            
+
         # Get task
         task = task_suite.get_task(task_id)
 
@@ -382,7 +406,13 @@ def run_experiment_for_latency(args: Args, latency_value: float, timestamp: str,
             ) as pool:
                 # Create task arguments for each episode
                 task_args_list = [
-                    (task_id, initial_states[episode_idx], episode_idx, max_steps, video_out_path_with_horizon)
+                    (
+                        task_id,
+                        initial_states[episode_idx],
+                        episode_idx,
+                        max_steps,
+                        video_out_path_with_horizon,
+                    )
                     for episode_idx in range(args.num_trials_per_task)
                 ]
 
@@ -397,17 +427,17 @@ def run_experiment_for_latency(args: Args, latency_value: float, timestamp: str,
                 try:
                     # Execute episodes in parallel and collect results
                     results = pool.imap(_eval_libero_wrapper, task_args_list)
-                    
+
                     # Collect results
                     episode_results = list(results)
                     all_results_data.extend(episode_results)
 
                     # Count successes
                     task_episodes = len(episode_results)
-                    task_successes = sum(1 for r in episode_results if r['success'])
+                    task_successes = sum(1 for r in episode_results if r["success"])
                     total_episodes += task_episodes
                     total_successes += task_successes
-                    
+
                 finally:
                     # Stop monitoring thread
                     stop_event.set()
@@ -421,73 +451,87 @@ def run_experiment_for_latency(args: Args, latency_value: float, timestamp: str,
             f"Cumulative success rate: {total_successes}/{total_episodes} ({total_successes / total_episodes * 100:.1f}%)"
         )
 
-    logging.info(f"Total success rate: {float(total_successes) / float(total_episodes)}")
+    logging.info(
+        f"Total success rate: {float(total_successes) / float(total_episodes)}"
+    )
     logging.info(f"Total episodes: {total_episodes}")
 
     # Save results to CSV
     if all_results_data:
         fieldnames = all_results_data[0].keys()
-        with open(results_csv_path_with_horizon, 'w', newline='') as csvfile:
+        with open(results_csv_path_with_horizon, "w", newline="") as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(all_results_data)
-        
+
         logging.info(f"Results saved to: {results_csv_path_with_horizon}")
-        
+
         # Calculate and save summary statistics
-        summary_csv_path = str(results_csv_path_with_horizon).replace('.csv', '_summary.csv')
+        summary_csv_path = str(results_csv_path_with_horizon).replace(
+            ".csv", "_summary.csv"
+        )
         task_summaries = []
-        
+
         # Calculate per-task success rates
         for task_id in range(num_tasks_in_suite):
-            task_results = [r for r in all_results_data if r['task_id'] == task_id]
+            task_results = [r for r in all_results_data if r["task_id"] == task_id]
             if task_results:
-                task_successes = sum(1 for r in task_results if r['success'])
+                task_successes = sum(1 for r in task_results if r["success"])
                 task_episodes = len(task_results)
                 task_success_rate = task_successes / task_episodes
-                
+
                 task_summary = {
-                    'task_id': task_id,
-                    'task_description': task_results[0]['task_description'],
-                    'total_episodes': task_episodes,
-                    'successes': task_successes,
-                    'success_rate': task_success_rate,
-                    'task_suite': args.task_suite_name,
-                    'seed': args.seed,
-                    'use_rtc': args.use_rtc,
-                    'action_horizon': args.action_horizon,
-                    'latency_ms': latency_value,
-                    'avg_inference_time': np.mean([r['avg_inference_time'] for r in task_results]),
-                    'avg_additional_delay_time': np.mean([r['avg_additional_delay_time'] for r in task_results])
+                    "task_id": task_id,
+                    "task_description": task_results[0]["task_description"],
+                    "total_episodes": task_episodes,
+                    "successes": task_successes,
+                    "success_rate": task_success_rate,
+                    "task_suite": args.task_suite_name,
+                    "seed": args.seed,
+                    "use_rtc": args.use_rtc,
+                    "action_horizon": args.action_horizon,
+                    "latency_ms": latency_value,
+                    "avg_inference_time": np.mean(
+                        [r["avg_inference_time"] for r in task_results]
+                    ),
+                    "avg_additional_delay_time": np.mean(
+                        [r["avg_additional_delay_time"] for r in task_results]
+                    ),
                 }
                 task_summaries.append(task_summary)
-        
+
         # Add overall summary
         overall_summary = {
-            'task_id': 'OVERALL',
-            'task_description': 'All tasks combined',
-            'total_episodes': total_episodes,
-            'successes': total_successes,
-            'success_rate': total_successes / total_episodes if total_episodes > 0 else 0,
-            'task_suite': args.task_suite_name,
-            'seed': args.seed,
-            'use_rtc': args.use_rtc,
-            'action_horizon': args.action_horizon,
-            'latency_ms': latency_value,
-            'avg_inference_time': np.mean([r['avg_inference_time'] for r in all_results_data]),
-            'avg_additional_delay_time': np.mean([r['avg_additional_delay_time'] for r in all_results_data])
+            "task_id": "OVERALL",
+            "task_description": "All tasks combined",
+            "total_episodes": total_episodes,
+            "successes": total_successes,
+            "success_rate": total_successes / total_episodes
+            if total_episodes > 0
+            else 0,
+            "task_suite": args.task_suite_name,
+            "seed": args.seed,
+            "use_rtc": args.use_rtc,
+            "action_horizon": args.action_horizon,
+            "latency_ms": latency_value,
+            "avg_inference_time": np.mean(
+                [r["avg_inference_time"] for r in all_results_data]
+            ),
+            "avg_additional_delay_time": np.mean(
+                [r["avg_additional_delay_time"] for r in all_results_data]
+            ),
         }
         task_summaries.append(overall_summary)
-        
+
         # Save summary CSV
         if task_summaries:
-            with open(summary_csv_path, 'w', newline='') as csvfile:
+            with open(summary_csv_path, "w", newline="") as csvfile:
                 writer = csv.DictWriter(csvfile, fieldnames=task_summaries[0].keys())
                 writer.writeheader()
                 writer.writerows(task_summaries)
-            
+
             logging.info(f"Summary results saved to: {summary_csv_path}")
-    
+
     # Restore original latency value
     args.latency_ms = original_latency
 
@@ -504,14 +548,16 @@ def main(args: Args) -> None:
 
     # Create timestamp for this run
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
+
     latency_values = [float(lat) for lat in args.latency_ms]
-    
+
     logging.info(f"Running experiments with latency values: {latency_values}")
-    
+
     # Run experiment for each latency value
     for latency_value in latency_values:
-        run_experiment_for_latency(args, latency_value, timestamp, task_suite, num_tasks_in_suite)
+        run_experiment_for_latency(
+            args, latency_value, timestamp, task_suite, num_tasks_in_suite
+        )
 
 
 def _get_libero_env(
@@ -530,8 +576,11 @@ def _get_libero_env(
         "camera_widths": resolution,
     }
     env = OffScreenRenderEnv(**env_args)
-    env.seed(seed)  # IMPORTANT: seed seems to affect object positions even when using fixed initial state
+    env.seed(
+        seed
+    )  # IMPORTANT: seed seems to affect object positions even when using fixed initial state
     return env, task_description
+
 
 def _quat2axisangle(quat):
     """
@@ -555,4 +604,3 @@ if __name__ == "__main__":
     multiprocessing.set_start_method("spawn")
     logging.basicConfig(level=logging.INFO)
     tyro.cli(main)
-

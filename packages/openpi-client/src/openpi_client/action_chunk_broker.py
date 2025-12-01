@@ -1,7 +1,5 @@
 from typing import Dict, List
 
-import json
-import pathlib
 import threading
 import time
 import numpy as np
@@ -20,7 +18,9 @@ class ActionChunkBroker(_base_policy.BasePolicy):
     list of chunks is exhausted.
     """
 
-    def __init__(self, policy: _base_policy.BasePolicy, action_horizon: int, is_rtc: bool = False, s: int = 12, d: int = 5):
+    def __init__(
+        self, policy: _base_policy.BasePolicy, action_horizon: int, is_rtc: bool = False, s: int = 12, d: int = 5
+    ):
         self._policy = policy
 
         self._action_horizon = action_horizon
@@ -32,8 +32,8 @@ class ActionChunkBroker(_base_policy.BasePolicy):
         self._background_running: bool = False
 
         self._obs: Dict[str, np.ndarray] | None = None
-        self._s = s # 25
-        self._d = d # 10
+        self._s = s  # 25
+        self._d = d  # 10
         self._is_rtc = is_rtc
         print(f"initialized with s: {s}, d: {d}")
         if self._is_rtc:
@@ -44,8 +44,8 @@ class ActionChunkBroker(_base_policy.BasePolicy):
         while True:
             if self._cur_step == self._s:
                 self._background_running = True
-                self._background_results = self._policy.infer(self._obs, self._last_origin_actions, self._is_rtc, 
-                s_param=self._s, d_param=self._d
+                self._background_results = self._policy.infer(
+                    self._obs, self._last_origin_actions, self._is_rtc, s_param=self._s, d_param=self._d
                 )
                 self._background_running = False
             else:

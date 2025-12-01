@@ -1,11 +1,13 @@
 """
 python compare_outputs_files.py --files output_bs1.pt output_bs2.pt output_bs4.pt
 """
-import torch
+
 import argparse
 
+import torch
+
 parser = argparse.ArgumentParser()
-parser.add_argument('--files', nargs='+', required=True, help='Output files to compare')
+parser.add_argument("--files", nargs="+", required=True, help="Output files to compare")
 args = parser.parse_args()
 
 print(f"Comparing {len(args.files)} output files:")

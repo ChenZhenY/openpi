@@ -19,7 +19,9 @@ class WebsocketClientPolicy(_base_policy.BasePolicy):
     See WebsocketPolicyServer for a corresponding server implementation.
     """
 
-    def __init__(self, host: str = "0.0.0.0", port: Optional[int] = None, api_key: Optional[str] = None, latency_ms: float = 0.0) -> None:
+    def __init__(
+        self, host: str = "0.0.0.0", port: Optional[int] = None, api_key: Optional[str] = None, latency_ms: float = 0.0
+    ) -> None:
         self._uri = f"ws://{host}"
         if port is not None:
             self._uri += f":{port}"
@@ -47,7 +49,14 @@ class WebsocketClientPolicy(_base_policy.BasePolicy):
                 time.sleep(5)
 
     @override
-    def infer(self, obs: Dict, prev_action: Optional[np.ndarray] = None, use_rtc: bool = True, s_param: int = 5, d_param: int = 4) -> Dict:  # noqa: UP006
+    def infer(
+        self,
+        obs: Dict,
+        prev_action: Optional[np.ndarray] = None,
+        use_rtc: bool = True,
+        s_param: int = 5,
+        d_param: int = 4,
+    ) -> Dict:  # noqa: UP006
         data = {
             "observation": obs,
             "prev_action": prev_action,
@@ -60,13 +69,12 @@ class WebsocketClientPolicy(_base_policy.BasePolicy):
         # Inject artificial latency if specified
         if self._latency_ms > 0:
             time.sleep(self._latency_ms / 1000.0)
-        
+
         # Use lock to ensure thread-safe WebSocket communication
         with self._ws_lock:
             self._ws.send(data)
             response = self._ws.recv()
-        
-            
+
         if isinstance(response, str):
             # we're expecting bytes; if the server sends a string, it's an error.
             raise RuntimeError(f"Error in inference server:\n{response}")
@@ -75,7 +83,7 @@ class WebsocketClientPolicy(_base_policy.BasePolicy):
     @override
     def infer_batch(self, obs_batch: List[Dict]) -> List[Dict]:
         return [self.infer(obs) for obs in obs_batch]
-    
+
     @override
     def make_example(self) -> Dict:
         return None
@@ -88,12 +96,12 @@ class WebsocketClientPolicy(_base_policy.BasePolicy):
         """Request the server to save collected data."""
         data = {"command": "save_data"}
         data = self._packer.pack(data)
-        
+
         # Use lock to ensure thread-safe WebSocket communication
         with self._ws_lock:
             self._ws.send(data)
             response = self._ws.recv()
-        
+
         if isinstance(response, str):
             # Check if it's an error message
             if response.startswith("Error"):
@@ -164,9 +172,7 @@ class AsyncWebsocketClientPolicy:
     async def _get_connection(self) -> Any:
         """Get a connection from the pool."""
         async with self._pool_lock:
-            assert self._connection_pool, (
-                "No connections left in pool. Either allocate more connections or reduce the number of concurrent requests."
-            )
+            assert self._connection_pool, "No connections left in pool. Either allocate more connections or reduce the number of concurrent requests."
             return self._connection_pool.pop()
 
     async def _return_connection(self, conn: Any) -> None:

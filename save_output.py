@@ -1,14 +1,17 @@
-'''
+"""
 python save_output.py --batch_size 4 --output_file output_bs4.pt
-'''
-import torch
-from openpi.shared.pi0_infer import Pi0Inference
-import numpy as np
+"""
+
 import argparse
 
+import numpy as np
+import torch
+
+from openpi.shared.pi0_infer import Pi0Inference
+
 parser = argparse.ArgumentParser()
-parser.add_argument('--batch_size', type=int, required=True)
-parser.add_argument('--output_file', type=str, required=True)
+parser.add_argument("--batch_size", type=int, required=True)
+parser.add_argument("--output_file", type=str, required=True)
 args = parser.parse_args()
 
 # Use same setup as benchmark
