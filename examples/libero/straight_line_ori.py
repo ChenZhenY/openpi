@@ -51,6 +51,7 @@ Example usage:
         --n_rollouts 50 --horizon 400 --seed 0 \
         --dataset_path /path/to/output.hdf5
 """
+
 import argparse
 import json
 import h5py
@@ -60,7 +61,6 @@ from copy import deepcopy
 import cv2
 import torch
 
-import robomimic
 import robomimic.utils.file_utils as FileUtils
 import robomimic.utils.torch_utils as TorchUtils
 import robomimic.utils.tensor_utils as TensorUtils
@@ -71,15 +71,16 @@ from robomimic.envs.wrappers import EnvWrapper
 from robomimic.algo import RolloutPolicy
 import robosuite.utils.camera_utils as CameraUtils
 import robosuite.utils.transform_utils as T
+
 try:
     import mujoco
 except ImportError:
     mujoco = None
 
-import types
 
 marker_params = []
 RENDER_SIZE = 256
+
 
 def _get_eef_pose_from_obs(obs):
     # Support both robosuite v1 (prefixed keys) and older versions
@@ -114,7 +115,9 @@ def _denormalize_action_sequence_if_needed(policy_wrapper, action_seq_np):
     # vector -> dict (per-timestep)
     denorm = []
     for a in action_seq_np:
-        ac_dict = PyUtils.vector_to_action_dict(a, action_shapes=action_shapes, action_keys=action_keys)
+        ac_dict = PyUtils.vector_to_action_dict(
+            a, action_shapes=action_shapes, action_keys=action_keys
+        )
         ac_dict = ObsUtils.unnormalize_dict(ac_dict, normalization_stats=stats)
         denorm.append(PyUtils.action_dict_to_vector(ac_dict, action_keys=action_keys))
     return np.stack(denorm, axis=0)
@@ -150,46 +153,75 @@ def add_action_traj_to_video(traj_all, frames, world_to_camera, action_traj_leng
         """Helper function to process a single frame with annotations"""
         if frame_idx >= total_frames:
             return
-        
+
         frame = frames[frame_idx].copy()
         h, w = frame.shape[:2]
-        
+
         # Visual indicator for new action chunk (first frame of chunk)
         if is_new_chunk:
-            cv2.rectangle(frame, (0, 0), (w-1, h-1), (0, 255, 0), 4)
-        
+            cv2.rectangle(frame, (0, 0), (w - 1, h - 1), (0, 255, 0), 4)
+
         if obj_pixels is not None:
             for px in obj_pixels:
-                x = int(px[1]); y = int(px[0])
+                x = int(px[1])
+                y = int(px[0])
                 if 0 <= x < w and 0 <= y < h:
                     cv2.circle(frame, (x, y), 6, (0, 0, 255), -1)
-        
+
         # Add text annotations: step number and action chunk index
         font = cv2.FONT_HERSHEY_SIMPLEX
         font_scale = 0.6
         thickness = 2
         text_color = (255, 255, 255)  # White text
         bg_color = (0, 0, 0)  # Black background for better visibility
-        
+
         # Step number text
         step_text = f"Step: {frame_idx}"
-        (text_width, text_height), baseline = cv2.getTextSize(step_text, font, font_scale, thickness)
-        cv2.rectangle(frame, (5, 5), (10 + text_width, 10 + text_height + baseline), bg_color, -1)
-        cv2.putText(frame, step_text, (5, 10 + text_height), font, font_scale, text_color, thickness)
-        
+        (text_width, text_height), baseline = cv2.getTextSize(
+            step_text, font, font_scale, thickness
+        )
+        cv2.rectangle(
+            frame, (5, 5), (10 + text_width, 10 + text_height + baseline), bg_color, -1
+        )
+        cv2.putText(
+            frame,
+            step_text,
+            (5, 10 + text_height),
+            font,
+            font_scale,
+            text_color,
+            thickness,
+        )
+
         # Action chunk index text
         chunk_text = f"Chunk: {chunk_idx}"
-        (text_width2, text_height2), baseline2 = cv2.getTextSize(chunk_text, font, font_scale, thickness)
-        cv2.rectangle(frame, (5, 15 + text_height + baseline), (10 + text_width2, 20 + text_height + baseline + text_height2 + baseline2), bg_color, -1)
-        cv2.putText(frame, chunk_text, (5, 20 + text_height + baseline + text_height2), font, font_scale, text_color, thickness)
-        
+        (text_width2, text_height2), baseline2 = cv2.getTextSize(
+            chunk_text, font, font_scale, thickness
+        )
+        cv2.rectangle(
+            frame,
+            (5, 15 + text_height + baseline),
+            (10 + text_width2, 20 + text_height + baseline + text_height2 + baseline2),
+            bg_color,
+            -1,
+        )
+        cv2.putText(
+            frame,
+            chunk_text,
+            (5, 20 + text_height + baseline + text_height2),
+            font,
+            font_scale,
+            text_color,
+            thickness,
+        )
+
         frames[frame_idx] = frame
 
     # Process complete chunks
     for i in range(action_chunk_num):
         start_idx = i * action_traj_length
         end_idx = (i + 1) * action_traj_length
-        eef_pos = traj_all[start_idx : end_idx]
+        eef_pos = traj_all[start_idx:end_idx]
         eef_pos = np.stack(eef_pos, axis=0)
 
         obj_pixels = CameraUtils.project_points_from_world_to_camera(
@@ -218,14 +250,27 @@ def add_action_traj_to_video(traj_all, frames, world_to_camera, action_traj_leng
         remainder_len = min(len(eef_pos), total_frames - remainder_start)
         for j in range(remainder_len):
             frame_idx = remainder_start + j
-            process_frame(frame_idx, action_chunk_num, obj_pixels, is_new_chunk=(j == 0))
+            process_frame(
+                frame_idx, action_chunk_num, obj_pixels, is_new_chunk=(j == 0)
+            )
 
     return frames
 
 
-def rollout(policy, env, horizon, render=False, video_writer=None, video_skip=5, return_obs=False, camera_names=None, n_obj_steps=10, obj_step=0.01):
+def rollout(
+    policy,
+    env,
+    horizon,
+    render=False,
+    video_writer=None,
+    video_skip=5,
+    return_obs=False,
+    camera_names=None,
+    n_obj_steps=10,
+    obj_step=0.01,
+):
     """
-    Helper function to carry out rollouts. Supports on-screen rendering, off-screen rendering to a video, 
+    Helper function to carry out rollouts. Supports on-screen rendering, off-screen rendering to a video,
     and returns the rollout trajectory.
 
     Args:
@@ -236,9 +281,9 @@ def rollout(policy, env, horizon, render=False, video_writer=None, video_skip=5,
         render (bool): whether to render rollout on-screen
         video_writer (imageio writer): if provided, use to write rollout to video
         video_skip (int): how often to write video frames
-        return_obs (bool): if True, return possibly high-dimensional observations along the trajectoryu. 
-            They are excluded by default because the low-dimensional simulation states should be a minimal 
-            representation of the environment. 
+        return_obs (bool): if True, return possibly high-dimensional observations along the trajectoryu.
+            They are excluded by default because the low-dimensional simulation states should be a minimal
+            representation of the environment.
         camera_names (list): determines which camera(s) are used for rendering. Pass more than
             one to output a video with multiple camera views concatenated horizontally.
 
@@ -281,14 +326,16 @@ def rollout(policy, env, horizon, render=False, video_writer=None, video_skip=5,
 
     results = {}
     video_count = 0  # video frame counter
-    total_reward = 0.
-    traj = dict(actions=[], rewards=[], dones=[], states=[], initial_state_dict=state_dict)
+    total_reward = 0.0
+    traj = dict(
+        actions=[], rewards=[], dones=[], states=[], initial_state_dict=state_dict
+    )
     if return_obs:
         # store observations too
         traj.update(dict(obs=[], next_obs=[]))
     try:
-        N = n_obj_steps # 10     
-        obj_step = obj_step # 0.01
+        N = n_obj_steps  # 10
+        obj_step = obj_step  # 0.01
         obj_dir = 1
         MIN_Y, MAX_Y = -0.03, 0.03
         OBJ_Y_IDX = 11
@@ -299,8 +346,8 @@ def rollout(policy, env, horizon, render=False, video_writer=None, video_skip=5,
         img_all = []
 
         for step_i in range(horizon):
-            do_move = (step_i > 0 and step_i % N == 0)
-            
+            do_move = step_i > 0 and step_i % N == 0
+
             if do_move:
                 curr_obj = obs["object"].copy()
                 step_dy = obj_step * obj_dir
@@ -318,7 +365,6 @@ def rollout(policy, env, horizon, render=False, video_writer=None, video_skip=5,
             else:
                 step_dy = 0.0
 
-            
             # TODO: zhenyang fix action chunk handling
             # reset object offset when new inference starts
             if len(policy.policy.action_queue) == 0:
@@ -326,7 +372,7 @@ def rollout(policy, env, horizon, render=False, video_writer=None, video_skip=5,
 
             if len(policy.policy.action_queue) > 0:
                 action_chunk = policy.policy.action_queue
-            
+
             # get action from policy
             act = policy(ob=obs)
 
@@ -365,10 +411,17 @@ def rollout(policy, env, horizon, render=False, video_writer=None, video_skip=5,
                     eef_pos, eef_rot = _get_eef_pose_from_obs(obs)
                     traj_all.append(eef_pos)
 
-                    frame = env.render(mode="rgb_array", height=RENDER_SIZE, width=RENDER_SIZE, camera_name="agentview")
+                    frame = env.render(
+                        mode="rgb_array",
+                        height=RENDER_SIZE,
+                        width=RENDER_SIZE,
+                        camera_name="agentview",
+                    )
                     frame = np.ascontiguousarray(frame)
                     video_img.append(frame)
-                    video_img = np.concatenate(video_img, axis=1) # concatenate horizontally # NOTE assume different camera
+                    video_img = np.concatenate(
+                        video_img, axis=1
+                    )  # concatenate horizontally # NOTE assume different camera
                     img_all.append(video_img)
                     # video_writer.append_data(video_img)
                 video_count += 1
@@ -399,7 +452,9 @@ def rollout(policy, env, horizon, render=False, video_writer=None, video_skip=5,
             )
 
             # breakpoint()
-            img_all = add_action_traj_to_video(traj_all, img_all, world_to_camera, action_traj_length=8)
+            img_all = add_action_traj_to_video(
+                traj_all, img_all, world_to_camera, action_traj_length=8
+            )
             for img in img_all:
                 video_writer.append_data(img)
 
@@ -411,7 +466,9 @@ def rollout(policy, env, horizon, render=False, video_writer=None, video_skip=5,
     if return_obs:
         # convert list of dict to dict of list for obs dictionaries (for convenient writes to hdf5 dataset)
         traj["obs"] = TensorUtils.list_of_flat_dict_to_dict_of_list(traj["obs"])
-        traj["next_obs"] = TensorUtils.list_of_flat_dict_to_dict_of_list(traj["next_obs"])
+        traj["next_obs"] = TensorUtils.list_of_flat_dict_to_dict_of_list(
+            traj["next_obs"]
+        )
 
     # list to numpy array
     for k in traj:
@@ -428,8 +485,8 @@ def rollout(policy, env, horizon, render=False, video_writer=None, video_skip=5,
 
 def run_trained_agent(args):
     # some arg checking
-    write_video = (args.video_path is not None)
-    assert not (args.render and write_video) # either on-screen or video but not both
+    write_video = args.video_path is not None
+    assert not (args.render and write_video)  # either on-screen or video but not both
     if args.render:
         # on-screen rendering can only support one camera
         assert len(args.camera_names) == 1
@@ -441,7 +498,9 @@ def run_trained_agent(args):
     device = TorchUtils.get_torch_device(try_to_use_cuda=True)
 
     # restore policy
-    policy, ckpt_dict = FileUtils.policy_from_checkpoint(ckpt_path=ckpt_path, device=device, verbose=True)
+    policy, ckpt_dict = FileUtils.policy_from_checkpoint(
+        ckpt_path=ckpt_path, device=device, verbose=True
+    )
 
     # read rollout settings
     rollout_num_episodes = args.n_rollouts
@@ -453,10 +512,10 @@ def run_trained_agent(args):
 
     # create environment from saved checkpoint
     env, _ = FileUtils.env_from_checkpoint(
-        ckpt_dict=ckpt_dict, 
-        env_name=args.env, 
-        render=args.render, 
-        render_offscreen=(args.video_path is not None), 
+        ckpt_dict=ckpt_dict,
+        env_name=args.env,
+        render=args.render,
+        render_offscreen=(args.video_path is not None),
         verbose=True,
     )
 
@@ -471,7 +530,7 @@ def run_trained_agent(args):
         video_writer = imageio.get_writer(args.video_path, fps=20)
 
     # maybe open hdf5 to write rollouts
-    write_dataset = (args.dataset_path is not None)
+    write_dataset = args.dataset_path is not None
     if write_dataset:
         data_writer = h5py.File(args.dataset_path, "w")
         data_grp = data_writer.create_group("data")
@@ -481,12 +540,12 @@ def run_trained_agent(args):
     for i in range(rollout_num_episodes):
         print(f"Starting rollout {i + 1}/{rollout_num_episodes}")
         stats, traj = rollout(
-            policy=policy, 
-            env=env, 
-            horizon=rollout_horizon, 
-            render=args.render, 
-            video_writer=video_writer, 
-            video_skip=args.video_skip, 
+            policy=policy,
+            env=env,
+            horizon=rollout_horizon,
+            render=args.render,
+            video_writer=video_writer,
+            video_skip=args.video_skip,
             return_obs=(write_dataset and args.dataset_obs),
             camera_names=args.camera_names,
             n_obj_steps=args.n_obj_steps,
@@ -503,17 +562,25 @@ def run_trained_agent(args):
             ep_data_grp.create_dataset("dones", data=np.array(traj["dones"]))
             if args.dataset_obs:
                 for k in traj["obs"]:
-                    ep_data_grp.create_dataset("obs/{}".format(k), data=np.array(traj["obs"][k]))
-                    ep_data_grp.create_dataset("next_obs/{}".format(k), data=np.array(traj["next_obs"][k]))
+                    ep_data_grp.create_dataset(
+                        "obs/{}".format(k), data=np.array(traj["obs"][k])
+                    )
+                    ep_data_grp.create_dataset(
+                        "next_obs/{}".format(k), data=np.array(traj["next_obs"][k])
+                    )
 
             # episode metadata
             if "model" in traj["initial_state_dict"]:
-                ep_data_grp.attrs["model_file"] = traj["initial_state_dict"]["model"] # model xml for this episode
-            ep_data_grp.attrs["num_samples"] = traj["actions"].shape[0] # number of transitions in this episode
+                ep_data_grp.attrs["model_file"] = traj["initial_state_dict"][
+                    "model"
+                ]  # model xml for this episode
+            ep_data_grp.attrs["num_samples"] = traj["actions"].shape[
+                0
+            ]  # number of transitions in this episode
             total_samples += traj["actions"].shape[0]
 
     rollout_stats = TensorUtils.list_of_flat_dict_to_dict_of_list(rollout_stats)
-    avg_rollout_stats = { k : np.mean(rollout_stats[k]) for k in rollout_stats }
+    avg_rollout_stats = {k: np.mean(rollout_stats[k]) for k in rollout_stats}
     avg_rollout_stats["Num_Success"] = np.sum(rollout_stats["Success_Rate"])
     print("Average Rollout Stats")
     print(json.dumps(avg_rollout_stats, indent=4))
@@ -524,7 +591,9 @@ def run_trained_agent(args):
     if write_dataset:
         # global metadata
         data_grp.attrs["total"] = total_samples
-        data_grp.attrs["env_args"] = json.dumps(env.serialize(), indent=4) # environment info
+        data_grp.attrs["env_args"] = json.dumps(
+            env.serialize(), indent=4
+        )  # environment info
         data_writer.close()
         print("Wrote dataset trajectories to {}".format(args.dataset_path))
 
@@ -568,7 +637,7 @@ if __name__ == "__main__":
     # Whether to render rollouts to screen
     parser.add_argument(
         "--render",
-        action='store_true',
+        action="store_true",
         help="on-screen rendering",
     )
 
@@ -592,7 +661,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--camera_names",
         type=str,
-        nargs='+',
+        nargs="+",
         default=["agentview"],
         help="(optional) camera name(s) to use for rendering on-screen or to video",
     )
@@ -608,7 +677,7 @@ if __name__ == "__main__":
     # If True and @dataset_path is supplied, will write possibly high-dimensional observations to dataset.
     parser.add_argument(
         "--dataset_obs",
-        action='store_true',
+        action="store_true",
         help="include possibly high-dimensional observations in output dataset hdf5 file (by default,\
             observations are excluded and only simulator states are saved)",
     )
@@ -637,4 +706,3 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     run_trained_agent(args)
-

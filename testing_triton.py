@@ -10,12 +10,14 @@
 # config = _config.get_config("pi0_libero")
 # checkpoint_dir = download.maybe_download("gs://openpi-assets/checkpoints/pi0_libero")
 
-from openpi.training import config as _config
-from openpi.policies import policy_config
-from openpi.shared import download
-from openpi.policies import libero_policy
 import time
+
 import numpy as np
+
+from openpi.policies import libero_policy
+from openpi.policies import policy_config
+from openpi.training import config as _config
+
 
 def test_n_inferences(policy, n, warmup=False):
     inference_times = []
@@ -34,6 +36,7 @@ def test_n_inferences(policy, n, warmup=False):
         print("Max inference time:", np.max(inference_times))
         print("Min inference time:", np.min(inference_times))
 
+
 def test_triton():
     config = _config.get_config("pi0_libero")
     checkpoint_dir = ".cache/openpi/openpi-assets/checkpoints/pi0_libero_pytorch_dexmal"
@@ -49,8 +52,8 @@ def test_triton():
     test_n_inferences(policy, 100)
     del policy
 
-def test_pytorch():
 
+def test_pytorch():
     config = _config.get_config("pi0_libero")
     checkpoint_dir = ".cache/openpi/openpi-assets/checkpoints/pi0_libero_pytorch_openpi"
 
@@ -65,6 +68,7 @@ def test_pytorch():
     test_n_inferences(policy, 100)
 
     del policy
+
 
 if __name__ == "__main__":
     test_triton()

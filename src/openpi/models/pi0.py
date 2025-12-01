@@ -1,4 +1,5 @@
 import logging
+import pickle
 import time
 
 import einops
@@ -13,7 +14,6 @@ from openpi.models import pi0_config
 import openpi.models.gemma as _gemma
 import openpi.models.siglip as _siglip
 from openpi.shared import array_typing as at
-import pickle
 
 logger = logging.getLogger("openpi")
 
@@ -284,7 +284,7 @@ class Pi0(_model.BaseModel):
         prev_action: _model.Actions,
         observation: _model.Observation,
         *,
-        num_steps: int | at.Int[at.Array, ""] = 10,       
+        num_steps: int | at.Int[at.Array, ""] = 10,
         s: int = 5,
         d: int = 4,
         beta: float = 8.0,
@@ -295,7 +295,7 @@ class Pi0(_model.BaseModel):
         dt = -1.0 / num_steps
         batch_size = observation.state.shape[0]
         noise = jax.random.normal(rng, (batch_size, self.action_horizon, self.action_dim))
-        
+
         # get prev_action from s-th step to the end, and then pad s steps with zeros
         prev_action_slice = prev_action[:, s:, :]  # get prev_action from s-th step to the end
         # jax.debug.print("prev_action_slice shape: {prev_action_slice_shape}", prev_action_slice_shape=prev_action_slice.shape)
@@ -317,28 +317,26 @@ class Pi0(_model.BaseModel):
             W : jnp.ndarray, shape (H,)
             """
             H = self.action_horizon
-            i = jnp.arange(H)           # 0,1,2,...,H-1
+            i = jnp.arange(H)  # 0,1,2,...,H-1
 
             # three-segment condition
             cond_1 = i < d
             cond_2 = (i >= d) & (i < H - s)
-            cond_3 = i >= H - s         # actually can be else
+            cond_3 = i >= H - s  # actually can be else
 
             # segment (1): all 1
             w1 = jnp.ones_like(i, dtype=float)
 
             # segment (2): exponential decay
             c_i = (H - s - i) / (H - s - d + 1)
-            w2  = jnp.exp(c_i) - 1
-            w2  = c_i * w2 / (jnp.e - 1)      # (e^{c_i} - 1) / (e - 1)
+            w2 = jnp.exp(c_i) - 1
+            w2 = c_i * w2 / (jnp.e - 1)  # (e^{c_i} - 1) / (e - 1)
 
             # segment (3): all 0
             w3 = jnp.zeros_like(i, dtype=float)
 
             # concatenate three segments
-            W = jnp.where(cond_1, w1,
-                jnp.where(cond_2, w2, w3)
-            )
+            W = jnp.where(cond_1, w1, jnp.where(cond_2, w2, w3))
 
             D = jnp.diag(W)
 
@@ -376,7 +374,11 @@ class Pi0(_model.BaseModel):
             positions = jnp.sum(prefix_mask, axis=-1)[:, None] + jnp.cumsum(suffix_mask, axis=-1) - 1
 
             (prefix_out, suffix_out), _ = self.PaliGemma.llm(
-                [None, suffix_tokens], mask=full_attn_mask, positions=positions, kv_cache=kv_cache, adarms_cond=[None, adarms_cond]
+                [None, suffix_tokens],
+                mask=full_attn_mask,
+                positions=positions,
+                kv_cache=kv_cache,
+                adarms_cond=[None, adarms_cond],
             )
             assert prefix_out is None
             v_t = self.action_out_proj(suffix_out[:, -self.action_horizon :])
@@ -389,14 +391,16 @@ class Pi0(_model.BaseModel):
 
             e = prev_action_slice - a_1_prime
             e = jnp.matmul(diag_W, e)
-            #Compute vector-Jacobian product
+            # Compute vector-Jacobian product
             grad_a_1_prime_x_t = f_vjp((e, jnp.zeros_like(v_t)))
             # jax.debug.print("grad_a_1_prime_x_t 0 shape: {grad_a_1_prime_x_t_shape}", grad_a_1_prime_x_t_shape=grad_a_1_prime_x_t[0].shape)
             # jax.debug.print("grad_a_1_prime_x_t 1 shape: {grad_a_1_prime_x_t_shape}", grad_a_1_prime_x_t_shape=grad_a_1_prime_x_t[1].shape)
             r_t = time * time / (time * time + (1 - time) * (1 - time))
 
-            a_2_prime = x_t + dt * (v_t - jax.lax.min(beta, time / ((1 - time) * r_t * r_t + 1e-6)) * grad_a_1_prime_x_t[0])
-            
+            a_2_prime = x_t + dt * (
+                v_t - jax.lax.min(beta, time / ((1 - time) * r_t * r_t + 1e-6)) * grad_a_1_prime_x_t[0]
+            )
+
             return a_2_prime, time + dt
 
         def cond(carry):
@@ -405,13 +409,13 @@ class Pi0(_model.BaseModel):
             return time >= -dt / 2
 
         x_0, _ = jax.lax.while_loop(cond, step, (noise, 1.0))
-        
+
         return x_0
 
     def save_data(self) -> None:
-        with open('save_data/output_actions_float32_save.pkl', 'wb') as f:
+        with open("save_data/output_actions_float32_save.pkl", "wb") as f:
             pickle.dump(self.output_actions_save, f)
-    
+
     @override
     def sample_actions(
         self,

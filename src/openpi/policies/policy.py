@@ -83,7 +83,16 @@ class Policy(BasePolicy):
         self._sample_actions = model.sample_actions
 
     @override
-    def infer(self, obs: dict, *, prev_action: np.ndarray | None = None, use_rtc: bool = False, noise: np.ndarray | None = None, s_param: int = 5, d_param: int = 4) -> dict:  # type: ignore[misc]
+    def infer(
+        self,
+        obs: dict,
+        *,
+        prev_action: np.ndarray | None = None,
+        use_rtc: bool = False,
+        noise: np.ndarray | None = None,
+        s_param: int = 5,
+        d_param: int = 4,
+    ) -> dict:  # type: ignore[misc]
         # Make a copy since transformations may modify the inputs in place.
         inputs = jax.tree.map(lambda x: x, obs)
         inputs = self._input_transform(inputs)
@@ -94,9 +103,7 @@ class Policy(BasePolicy):
         else:
             # Convert inputs to PyTorch tensors and move to correct device
             inputs = jax.tree.map(
-                lambda x: torch.from_numpy(np.array(x)).to(self._pytorch_device)[
-                    None, ...
-                ],
+                lambda x: torch.from_numpy(np.array(x)).to(self._pytorch_device)[None, ...],
                 inputs,
             )
             sample_rng_or_pytorch_device = self._pytorch_device
@@ -106,15 +113,9 @@ class Policy(BasePolicy):
         sample_kwargs["s"] = s_param
         sample_kwargs["d"] = d_param
         if noise is not None:
-            noise = (
-                torch.from_numpy(noise).to(self._pytorch_device)
-                if self._is_pytorch_model
-                else jnp.asarray(noise)
-            )
+            noise = torch.from_numpy(noise).to(self._pytorch_device) if self._is_pytorch_model else jnp.asarray(noise)
 
-            if (
-                noise.ndim == 2
-            ):  # If noise is (action_horizon, action_dim), add batch dimension
+            if noise.ndim == 2:  # If noise is (action_horizon, action_dim), add batch dimension
                 noise = noise[None, ...]  # Make it (1, action_horizon, action_dim)
             sample_kwargs["noise"] = noise
 
@@ -163,16 +164,13 @@ class Policy(BasePolicy):
 
         # Ensure we always record a total inference time.
         times.setdefault("infer_total", time.monotonic() - start_time)
-        
+
         # Collect data for JAX models (after JIT execution)
-        if not self._is_pytorch_model and hasattr(self._model, 'output_actions_save'):
+        if not self._is_pytorch_model and hasattr(self._model, "output_actions_save"):
             self._model.output_actions_save.append(origin_actions)
-            
 
         if self._is_pytorch_model:
-            outputs = jax.tree.map(
-                lambda x: np.asarray(x[0, ...].detach().cpu()), outputs
-            )
+            outputs = jax.tree.map(lambda x: np.asarray(x[0, ...].detach().cpu()), outputs)
         else:
             outputs = jax.tree.map(lambda x: np.asarray(x[0, ...]), outputs)
 
@@ -180,9 +178,7 @@ class Policy(BasePolicy):
         outputs["policy_timing"] = times
         return outputs
 
-    def infer_batch(
-        self, obs_batch: list[dict], *, noise: np.ndarray | None = None
-    ) -> list[dict]:
+    def infer_batch(self, obs_batch: list[dict], *, noise: np.ndarray | None = None) -> list[dict]:
         """Run inference on a batch of observations.
 
         This supports two input formats:
@@ -206,10 +202,7 @@ class Policy(BasePolicy):
         # If inputs look like websocket envelopes (with prev_action / use_rtc / s_param / d_param),
         # use the per-example infer() path so that guided_inference and RTC semantics are respected.
         envelope_keys = {"observation", "prev_action", "use_rtc", "s_param", "d_param"}
-        has_envelope_like = any(
-            isinstance(obs, dict) and any(k in obs for k in envelope_keys)
-            for obs in obs_batch
-        )
+        has_envelope_like = any(isinstance(obs, dict) and any(k in obs for k in envelope_keys) for obs in obs_batch)
 
         if has_envelope_like:
             results: list[dict] = []
@@ -271,26 +264,18 @@ class Policy(BasePolicy):
             self._rng, sample_rng_or_pytorch_device = jax.random.split(self._rng)
         else:
             # Convert inputs to PyTorch tensors and move to correct device
-            inputs = jax.tree.map(
-                lambda x: torch.from_numpy(np.array(x)).to(self._pytorch_device), inputs
-            )
+            inputs = jax.tree.map(lambda x: torch.from_numpy(np.array(x)).to(self._pytorch_device), inputs)
             sample_rng_or_pytorch_device = self._pytorch_device
 
         # Prepare kwargs for sample_actions
         sample_kwargs = dict(self._sample_kwargs)
         if noise is not None:
-            noise = (
-                torch.from_numpy(noise).to(self._pytorch_device)
-                if self._is_pytorch_model
-                else jnp.asarray(noise)
-            )
+            noise = torch.from_numpy(noise).to(self._pytorch_device) if self._is_pytorch_model else jnp.asarray(noise)
             sample_kwargs["noise"] = noise
 
         observation = _model.Observation.from_dict(inputs)
         start_time = time.monotonic()
-        actions, times = self._sample_actions(
-            sample_rng_or_pytorch_device, observation, **sample_kwargs
-        )
+        actions, times = self._sample_actions(sample_rng_or_pytorch_device, observation, **sample_kwargs)
         times["infer_total"] = time.monotonic() - start_time
         outputs = {
             "state": inputs["state"],
