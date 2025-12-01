@@ -324,7 +324,6 @@ def rollout(
     # hack that is necessary for robosuite tasks for deterministic action playback
     obs = env.reset_to(state_dict)
 
-    results = {}
     video_count = 0  # video frame counter
     total_reward = 0.0
     traj = dict(
@@ -370,8 +369,8 @@ def rollout(
             if len(policy.policy.action_queue) == 0:
                 obj_offset_accum = 0.0
 
-            if len(policy.policy.action_queue) > 0:
-                action_chunk = policy.policy.action_queue
+            # if len(policy.policy.action_queue) > 0:
+            #     action_chunk = policy.policy.action_queue
 
             # get action from policy
             act = policy(ob=obs)
@@ -406,7 +405,7 @@ def rollout(
                 if video_count % video_skip == 0:
                     video_img = []
                     # Prepare markers before rendering (compute once per frame)
-                    world_pts = None
+                    # world_pts = None
 
                     eef_pos, eef_rot = _get_eef_pose_from_obs(obs)
                     traj_all.append(eef_pos)

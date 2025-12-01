@@ -275,7 +275,7 @@ def eval_libero(args: Args) -> None:
 
             # Save a replay video of the episode
             suffix = "succ" if done else "fail"
-            task_segment = task_description.replace(" ", "_")
+            # task_segment = task_description.replace(" ", "_")
             imageio.mimwrite(
                 video_out_path_with_horizon
                 / f"task_{task_id}_ep{episode_idx}_rtc{args.use_rtc}_hrzn{args.action_horizon}_{suffix}.mp4",

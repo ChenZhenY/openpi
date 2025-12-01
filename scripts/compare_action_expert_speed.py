@@ -106,8 +106,7 @@ def compare_speeds(args: Args):
             kv_cache=None,
             adarms_cond=[None, adarms_cond],
         )
-        v_t = model.action_out_proj(action_out[:, -model.action_horizon :])
-        return v_t
+        return model.action_out_proj(action_out[:, -model.action_horizon :])
 
     # JIT compile
     print("JIT compiling...")
@@ -183,8 +182,7 @@ def compare_speeds(args: Args):
             kv_cache=kv_cache,
             adarms_cond=[None, adarms_cond],
         )
-        v_t = model.action_out_proj(action_out[:, -model.action_horizon :])
-        return v_t
+        return model.action_out_proj(action_out[:, -model.action_horizon :])
 
     # JIT compile
     print("\nJIT compiling...")

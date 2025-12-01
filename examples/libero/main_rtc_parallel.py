@@ -254,7 +254,7 @@ def eval_libero(
     # Save video
     _worker_status_dict[pid] = f"ep{episode_idx}: saving video"
     suffix = "succ" if success else "fail"
-    task_segment = task_description.replace(" ", "_")
+    # task_segment = task_description.replace(" ", "_")
 
     video_filename = (
         video_out_path

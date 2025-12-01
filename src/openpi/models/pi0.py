@@ -304,9 +304,9 @@ class Pi0(_model.BaseModel):
         # concatenate prev_action_slice and zero_actions
         prev_action_slice = jnp.concatenate([prev_action_slice, zero_actions], axis=1)
 
-        def make_W(d: int, s: int) -> jnp.ndarray:
+        def make_w(d: int, s: int) -> jnp.ndarray:
             """
-            generate the weight vector W ∈ ℝ^H
+            generate the weight vector W ∈ R^H
             parameters
             ----
             H : int  # sequence length
@@ -316,19 +316,19 @@ class Pi0(_model.BaseModel):
             ----
             W : jnp.ndarray, shape (H,)
             """
-            H = self.action_horizon
-            i = jnp.arange(H)  # 0,1,2,...,H-1
+            h = self.action_horizon
+            i = jnp.arange(h)  # 0,1,2,...,H-1
 
             # three-segment condition
             cond_1 = i < d
-            cond_2 = (i >= d) & (i < H - s)
-            cond_3 = i >= H - s  # actually can be else
+            cond_2 = (i >= d) & (i < h - s)
+            # cond_3 = i >= H - s  # actually can be else
 
             # segment (1): all 1
             w1 = jnp.ones_like(i, dtype=float)
 
             # segment (2): exponential decay
-            c_i = (H - s - i) / (H - s - d + 1)
+            c_i = (h - s - i) / (h - s - d + 1)
             w2 = jnp.exp(c_i) - 1
             w2 = c_i * w2 / (jnp.e - 1)  # (e^{c_i} - 1) / (e - 1)
 
@@ -336,15 +336,14 @@ class Pi0(_model.BaseModel):
             w3 = jnp.zeros_like(i, dtype=float)
 
             # concatenate three segments
-            W = jnp.where(cond_1, w1, jnp.where(cond_2, w2, w3))
+            w = jnp.where(cond_1, w1, jnp.where(cond_2, w2, w3))
 
-            D = jnp.diag(W)
+            d = jnp.diag(w)
 
-            D_batch = jnp.stack([D] * 1, axis=0)
-            return D_batch
+            return jnp.stack([d] * 1, axis=0)
 
         # create W
-        diag_W = make_W(d, s)
+        diag_w = make_w(d, s)
 
         # first fill KV cache with a forward pass of the prefix
         prefix_tokens, prefix_mask, prefix_ar_mask = self.embed_prefix(observation)
@@ -390,7 +389,7 @@ class Pi0(_model.BaseModel):
             (a_1_prime, v_t), f_vjp = jax.vjp(func_a_1_prime, x_t, time)
 
             e = prev_action_slice - a_1_prime
-            e = jnp.matmul(diag_W, e)
+            e = jnp.matmul(diag_w, e)
             # Compute vector-Jacobian product
             grad_a_1_prime_x_t = f_vjp((e, jnp.zeros_like(v_t)))
             # jax.debug.print("grad_a_1_prime_x_t 0 shape: {grad_a_1_prime_x_t_shape}", grad_a_1_prime_x_t_shape=grad_a_1_prime_x_t[0].shape)

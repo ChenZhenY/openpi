@@ -4,6 +4,7 @@ Plot number of successes vs latency for each task in the latency sweep experimen
 """
 
 from pathlib import Path
+import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -44,18 +45,17 @@ def load_all_data():
         if results_file is None:
             continue
 
-        df = pd.read_csv(results_file)
+        latency_df = pd.read_csv(results_file)
         # Filter out the OVERALL row
-        df = df[df["task_id"] != "OVERALL"]
+        latency_df = latency_df[latency_df["task_id"] != "OVERALL"]
         # Convert task_id to int
-        df["task_id"] = df["task_id"].astype(int)
-        all_data.append(df)
+        latency_df["task_id"] = latency_df["task_id"].astype(int)
+        all_data.append(latency_df)
 
     if not all_data:
         raise ValueError("No data found!")
 
-    combined_df = pd.concat(all_data, ignore_index=True)
-    return combined_df
+    return pd.concat(all_data, ignore_index=True)
 
 
 def plot_successes_vs_latency(df, output_path=None):
@@ -102,7 +102,7 @@ def plot_successes_vs_latency(df, output_path=None):
     plt.yticks(range(0, 21, 2))
 
     # Add grid
-    plt.grid(True, alpha=0.3, linestyle="--")
+    plt.grid(True, alpha=0.3, linestyle="--")  # noqa: FBT003
 
     # Add legend (below the plot area)
     plt.legend(bbox_to_anchor=(0.5, -0.15), loc="upper center", fontsize=9, framealpha=0.9, ncol=2)
@@ -150,24 +150,24 @@ def main():
     print("Loading data from latency sweep experiments...")
 
     try:
-        df = load_all_data()
-        print(f"Successfully loaded data for {len(df)} task-latency combinations")
-        print(f"Unique latencies: {sorted(df['latency_ms'].unique())}")
-        print(f"Unique tasks: {sorted(df['task_id'].unique())}")
+        task_latency_df = load_all_data()
+        print(f"Successfully loaded data for {len(task_latency_df)} task-latency combinations")
+        print(f"Unique latencies: {sorted(task_latency_df['latency_ms'].unique())}")
+        print(f"Unique tasks: {sorted(task_latency_df['task_id'].unique())}")
 
         # Print summary statistics
-        print_summary_statistics(df)
+        print_summary_statistics(task_latency_df)
 
         # Create the plot
         output_dir = Path("scripts")
         output_path = output_dir / "latency_sweep_successes_plot.png"
 
         print("\nCreating plot...")
-        plot_successes_vs_latency(df, output_path)
+        plot_successes_vs_latency(task_latency_df, output_path)
 
         # Also create a PDF version
         output_path_pdf = output_dir / "latency_sweep_successes_plot.pdf"
-        plot_successes_vs_latency(df, output_path_pdf)
+        plot_successes_vs_latency(task_latency_df, output_path_pdf)
 
     except Exception as e:
         print(f"Error: {e}")
@@ -180,4 +180,4 @@ def main():
 
 
 if __name__ == "__main__":
-    exit(main())
+    sys.exit(main())

@@ -234,7 +234,7 @@ class Policy(BasePolicy):
 
         # Stack observations into batch format
         batched_obs = {}
-        for key in first_obs.keys():
+        for key in first_obs:
             if key in first_obs:
                 # Stack all values for this key
                 values = [obs[key] for obs in obs_batch]
@@ -243,7 +243,7 @@ class Policy(BasePolicy):
                 elif isinstance(values[0], dict):
                     # Handle nested dictionaries (like images)
                     batched_obs[key] = {}
-                    for subkey in values[0].keys():
+                    for subkey in values[0]:
                         subvalues = [obs[key][subkey] for obs in obs_batch]
                         if isinstance(subvalues[0], np.ndarray):
                             batched_obs[key][subkey] = np.stack(subvalues, axis=0)
@@ -316,7 +316,7 @@ class Policy(BasePolicy):
             return make_aloha_example()
         if env == EnvMode.DROID:
             return make_droid_example()
-        if env == EnvMode.LIBERO or env == EnvMode.LIBERO_REALTIME:
+        if env in [EnvMode.LIBERO, EnvMode.LIBERO_REALTIME]:
             return make_libero_example()
 
         raise ValueError(f"Unknown environment: {env}")

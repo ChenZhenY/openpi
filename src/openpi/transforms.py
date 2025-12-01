@@ -268,7 +268,7 @@ class TokenizePrompt(DataTransformFn):
 
             for i, single_prompt in enumerate(prompt):
                 if not isinstance(single_prompt, str):
-                    single_prompt = single_prompt.item()
+                    single_prompt = single_prompt.item()  # noqa: PLW2901
 
                 # Get state for this sample if needed
                 sample_state = state[i] if state is not None and len(state.shape) > 1 else state
@@ -311,7 +311,7 @@ class TokenizeFASTInputs(DataTransformFn):
 
             for i, single_prompt in enumerate(prompt):
                 if not isinstance(single_prompt, str):
-                    single_prompt = single_prompt.item()
+                    single_prompt = single_prompt.item()  # noqa: PLW2901
 
                 # Get state and actions for this sample
                 sample_state = state[i] if len(state.shape) > 1 else state
@@ -451,7 +451,7 @@ class ReplacePromptWithReasoning(DataTransformFn):
                 available_components = ["original"]  # Always include original as option
                 for component in self.reasoning_components:
                     if reasoning_step.get(component):
-                        available_components.append(component)
+                        available_components.append(component)  # noqa: PERF401
 
                 if available_components:
                     selected_component = random.choice(available_components)

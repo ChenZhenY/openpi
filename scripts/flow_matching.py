@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+import torch.nn.functional as F  # noqa: N812
 
 
 class UNet(nn.Module):
@@ -32,9 +32,7 @@ class UNet(nn.Module):
         # Decoder with skip connections
         d3 = F.relu(self.dec3(e3))
         d2 = F.relu(self.dec2(torch.cat([d3, e2], dim=1)))
-        d1 = self.dec1(torch.cat([d2, e1], dim=1))
-
-        return d1
+        return self.dec1(torch.cat([d2, e1], dim=1))
 
 
 class FlowMatching(nn.Module):
@@ -59,9 +57,7 @@ class FlowMatching(nn.Module):
         v_true = x1 - x0
 
         # L2 loss between predicted and true vector fields
-        loss = F.mse_loss(v_pred, v_true)
-
-        return loss
+        return F.mse_loss(v_pred, v_true)
 
     @torch.no_grad()
     def sample(self, x0, steps=100):

@@ -286,8 +286,7 @@ def convert_weights(weights, dump_weights):
         period = min_period * (max_period / min_period) ** fraction
         scaling_factor = 1.0 / period * 2 * torch.pi
         sin_input = scaling_factor[None, :] * time[:, None]
-        pos_emb = torch.cat([torch.sin(sin_input), torch.cos(sin_input)], dim=1)
-        return pos_emb
+        return torch.cat([torch.sin(sin_input), torch.cos(sin_input)], dim=1)
 
     n_decode_steps = 10
     mlp_in_weight_action = torch.tensor(

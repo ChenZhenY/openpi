@@ -115,8 +115,8 @@ def main(args: Args) -> None:
     def policy_factory():
         policy = create_policy(args)
         # Ensure policy metadata includes env for make_example()
-        if "env" not in policy._metadata:
-            policy._metadata["env"] = args.env.value
+        if "env" not in policy._metadata:  # noqa: SLF001
+            policy._metadata["env"] = args.env.value  # noqa: SLF001
         # Record the policy's behavior.
         if args.record:
             policy = _policy.PolicyRecorder(policy, "policy_records")

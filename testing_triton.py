@@ -19,13 +19,13 @@ from openpi.policies import policy_config
 from openpi.training import config as _config
 
 
-def test_n_inferences(policy, n, warmup=False):
+def test_n_inferences(policy, n, *, warmup=False):
     inference_times = []
-    for i in range(n):
+    for _ in range(n):
         example = libero_policy.make_libero_example()
         # print(f"Inferring {i+1}...")
         start_time = time.time()
-        result = policy.infer(example)
+        policy.infer(example)
         inference_times.append(time.time() - start_time)
         # print("Done. took", inference_times[-1], "seconds")
         # print("Actions shape:", result["actions"].shape)

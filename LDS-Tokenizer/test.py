@@ -1,15 +1,17 @@
-# import seaborn as sns
+import os
+import sys
+
 import h5py
 import numpy as np
 from scipy import sparse
+from transformers import AutoProcessor
 
 
-def sparsify_matrix(A, threshold=1e-6):
+def sparsify_matrix(matrix, threshold=1e-6):
     # Zero out small elements
-    A[np.abs(A) < threshold] = 0
+    matrix[np.abs(matrix) < threshold] = 0
     # Convert to sparse format
-    A_sparse = sparse.csr_matrix(A)
-    return A_sparse
+    return sparse.csr_matrix(matrix)
 
 
 def denormalize_action_mean_std(action_norm, mean, std):
@@ -36,12 +38,12 @@ def denormalize_action_percentile(action_norm, min_val, max_val):
 state_data = []
 action_data = []
 with h5py.File("/srv/rl2-lab/flash7/zhenyang/data/robomimic-sim/low_dim_v141.hdf5", "r") as f:
-    f = f["data"]
-    print(f.keys())
-    print(f["demo_0"].keys())
-    for demo in f.keys():
-        state_data.append(f[demo]["states"][:])
-        action_data.append(f[demo]["actions"][:])
+    f_dict = f["data"]
+    print(f_dict.keys())
+    print(f_dict["demo_0"].keys())
+    for demo in f_dict:
+        state_data.append(f_dict[demo]["states"][:])
+        action_data.append(f_dict[demo]["actions"][:])
 
 state_data_array = np.concatenate(state_data, axis=0)
 action_data_array = np.concatenate(action_data, axis=0)
@@ -68,9 +70,6 @@ print(
 )
 test_action_norm = action_norm[10:30, :]
 
-import os
-import sys
-
 # Set all cache directories before any HF imports
 cache_dir = "/srv/rl2-lab/flash7/zhenyang/.cache"
 os.environ["TRANSFORMERS_CACHE"] = cache_dir
@@ -80,11 +79,8 @@ os.environ["XDG_CACHE_HOME"] = cache_dir
 
 # Clear any existing HF modules from sys.modules
 for module in list(sys.modules.keys()):
-    if module.startswith("transformers") or module.startswith("huggingface"):
+    if module.startswith(("transformers", "huggingface")):
         del sys.modules[module]
-
-import numpy as np
-from transformers import AutoProcessor
 
 # Load the tokenizer from the Hugging Face hub
 tokenizer = AutoProcessor.from_pretrained("physical-intelligence/fast", trust_remote_code=True, local_files_only=True)

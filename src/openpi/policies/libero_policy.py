@@ -23,12 +23,10 @@ def _parse_image(image) -> np.ndarray:
         image = (255 * image).astype(np.uint8)
 
     # Handle both single images and batch of images
-    if len(image.shape) == 4:  # Batch of images: (batch, c, h, w)
-        if image.shape[1] == 3:  # Channel dimension is at index 1
-            image = einops.rearrange(image, "b c h w -> b h w c")
-    elif len(image.shape) == 3:  # Single image: (c, h, w)
-        if image.shape[0] == 3:  # Channel dimension is at index 0
-            image = einops.rearrange(image, "c h w -> h w c")
+    if len(image.shape) == 4 and image.shape[1] == 3:  # Batch of images: (batch, c, h, w)
+        image = einops.rearrange(image, "b c h w -> b h w c")
+    elif len(image.shape) == 3 and image.shape[0] == 3:  # Single image: (c, h, w)
+        image = einops.rearrange(image, "c h w -> h w c")
 
     return image
 
