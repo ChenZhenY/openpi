@@ -7,6 +7,15 @@ import tree
 from typing_extensions import override
 
 from openpi_client import base_policy as _base_policy
+from dataclasses import dataclass
+
+
+@dataclass
+class ActionChunk:
+    chunk_index: int
+    request_timestamp: float
+    response_timestamp: float
+    actions: np.ndarray
 
 
 class ActionChunkBroker(_base_policy.BasePolicy):
@@ -19,7 +28,12 @@ class ActionChunkBroker(_base_policy.BasePolicy):
     """
 
     def __init__(
-        self, policy: _base_policy.BasePolicy, action_horizon: int, is_rtc: bool = False, s: int = 12, d: int = 5
+        self,
+        policy: _base_policy.BasePolicy,
+        action_horizon: int,
+        is_rtc: bool = False,
+        s: int = 12,
+        d: int = 5,
     ):
         self._policy = policy
 
@@ -30,6 +44,7 @@ class ActionChunkBroker(_base_policy.BasePolicy):
         self._last_origin_actions: np.ndarray | None = None
         self._background_results: Dict[str, np.ndarray] | None = None
         self._background_running: bool = False
+        self._action_chunks: List[ActionChunk] = []
 
         self._obs: Dict[str, np.ndarray] | None = None
         self._s = s  # 25
@@ -44,8 +59,22 @@ class ActionChunkBroker(_base_policy.BasePolicy):
         while True:
             if self._cur_step == self._s:
                 self._background_running = True
+                request_timestamp = time.time()
                 self._background_results = self._policy.infer(
-                    self._obs, self._last_origin_actions, self._is_rtc, s_param=self._s, d_param=self._d
+                    self._obs,
+                    self._last_origin_actions,
+                    self._is_rtc,
+                    s_param=self._s,
+                    d_param=self._d,
+                )
+                response_timestamp = time.time()
+                self._action_chunks.append(
+                    ActionChunk(
+                        chunk_index=len(self._action_chunks),
+                        request_timestamp=request_timestamp,
+                        response_timestamp=response_timestamp,
+                        actions=self._background_results["actions"],
+                    )
                 )
                 self._background_running = False
             else:
@@ -57,6 +86,7 @@ class ActionChunkBroker(_base_policy.BasePolicy):
             # init
             if self._last_results is None:
                 self._last_results = self._policy.infer(obs, None, self._is_rtc, s_param=self._s, d_param=self._d)
+                assert isinstance(self._last_results, dict), "last_results must be a dict"
                 self._last_origin_actions = self._last_results["origin_actions"]
                 self._last_state = self._last_results["state"]
                 self._last_results = {"actions": self._last_results["actions"]}
@@ -103,7 +133,16 @@ class ActionChunkBroker(_base_policy.BasePolicy):
     @override
     def reset(self) -> None:
         self._policy.reset()
+        self._action_chunks = []
         self._last_results = None
         self._last_origin_actions = None
         self._background_results = None
         self._cur_step = 0
+
+    @property
+    def action_chunks(self) -> List[ActionChunk]:
+        return self._action_chunks
+
+    @property
+    def current_action_chunk(self) -> ActionChunk:
+        return self._action_chunks[-1]

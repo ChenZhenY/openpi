@@ -44,7 +44,6 @@ class LiberoSimEnvironment(_environment.Environment):
         self._step_counter = 0
         self._last_obs = None
         self._episode_results: List[bool] = []
-        self._episode_frames: List[List[np.ndarray]] = []
         self._current_frames: List[np.ndarray] = []
         self._current_success = False
 
@@ -147,8 +146,6 @@ class LiberoSimEnvironment(_environment.Environment):
         if done or self._step_counter >= self._max_episode_steps:
             self._done = True
             self._episode_results.append(self._current_success)
-            # Store frames for this episode
-            self._episode_frames.append(self._current_frames)
             self._current_frames = []
 
     @property
@@ -157,6 +154,5 @@ class LiberoSimEnvironment(_environment.Environment):
         return self._episode_results
 
     @property
-    def episode_frames(self) -> List[List[np.ndarray]]:
-        """Per-episode list of recorded frames (each frame is HxWxC uint8)."""
-        return self._episode_frames
+    def current_success(self) -> bool:
+        return self._current_success

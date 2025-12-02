@@ -2,12 +2,10 @@ from __future__ import annotations
 
 import dataclasses
 import logging
-import math
 import pathlib
 import threading
 import time
 
-import imageio
 import json
 import numpy as np
 from libero.libero import benchmark
@@ -17,9 +15,10 @@ from openpi_client.runtime import runtime as _runtime
 from openpi_client.runtime.agents import policy_agent as _policy_agent
 import tyro
 
-from PIL import Image, ImageDraw, ImageFont
 from examples.libero import utils
 from examples.libero.env import LiberoSimEnvironment
+from examples.libero.subscribers.metadata_saver import MetadataSaver
+from examples.libero.subscribers.video_saver import VideoSaver
 
 LIBERO_ENV_RESOLUTION = 256  # resolution used to render training data
 
@@ -77,7 +76,7 @@ def _latency_for_robot(args: Args, robot_idx: int) -> float:
     return float(args.latency_ms[-1])
 
 
-def _create_policy_agent(args: Args, robot_idx: int) -> _policy_agent.PolicyAgent:
+def _create_policy_agent(args: Args) -> _policy_agent.PolicyAgent:
     """Create a PolicyAgent that uses WebsocketClientPolicy + ActionChunkBroker."""
     ws_client = _websocket_client_policy.WebsocketClientPolicy(
         args.host,
@@ -94,9 +93,11 @@ def _create_policy_agent(args: Args, robot_idx: int) -> _policy_agent.PolicyAgen
 
 
 def _run_robot(
+    args: Args,
     robot_idx: int,
     env: LiberoSimEnvironment,
     agent: _policy_agent.PolicyAgent,
+    action_chunk_broker: action_chunk_broker.ActionChunkBroker,
     num_episodes: int,
     control_hz: float,
     results_list: list,
@@ -106,7 +107,15 @@ def _run_robot(
     runtime = _runtime.Runtime(
         environment=env,
         agent=agent,
-        subscribers=[],
+        subscribers=[
+            MetadataSaver(
+                out_dir=pathlib.Path(args.video_out_path) / args.task_suite_name,
+                action_chunk_broker=action_chunk_broker,
+            ),
+            VideoSaver(
+                out_dir=pathlib.Path(args.video_out_path) / args.task_suite_name,
+            ),
+        ],
         max_hz=control_hz,
         num_episodes=num_episodes,
         max_episode_steps=env._max_episode_steps,  # type: ignore[attr-defined]
@@ -215,7 +224,7 @@ def main(args: Args) -> None:
             )
 
             # Create policy agent for this robot (with optional per-robot latency)
-            agent = _create_policy_agent(args, robot_idx)
+            agent = _create_policy_agent(args)
 
             # Number of episodes this robot will run equals number of its assigned initial states
             num_episodes_robot = init_states_robot.shape[0]
@@ -223,6 +232,7 @@ def main(args: Args) -> None:
             thread = threading.Thread(
                 target=_run_robot,
                 args=(
+                    args,
                     robot_idx,
                     env,
                     agent,
@@ -268,184 +278,6 @@ def main(args: Args) -> None:
 
         # Build and save matrix video + JSON for this task from robot_envs
         try:
-            # Flatten frames per robot across all its episodes, and track episode indices
-            # as well as the last frame index for each episode (to detect episode end).
-            per_robot_flat_frames: list[list[np.ndarray]] = []
-            per_robot_flat_episode_ids: list[list[int]] = []
-            per_robot_episode_last_indices: list[list[int]] = []
-            for env in robot_envs:
-                frames_flat: list[np.ndarray] = []
-                episode_ids_flat: list[int] = []
-                episode_last_indices: list[int] = []
-                for ep_idx, ep_frames in enumerate(env.episode_frames):
-                    if not ep_frames:
-                        continue
-
-                    for frame in ep_frames:
-                        frames_flat.append(frame)
-                        episode_ids_flat.append(ep_idx)
-                    last_idx = len(frames_flat) - 1
-                    episode_last_indices.append(last_idx)
-                per_robot_flat_frames.append(frames_flat)
-                per_robot_flat_episode_ids.append(episode_ids_flat)
-                per_robot_episode_last_indices.append(episode_last_indices)
-
-            if per_robot_flat_frames:
-                # Determine grid layout
-                num_robots_task = len(per_robot_flat_frames)
-                cols = int(math.ceil(math.sqrt(num_robots_task)))
-                rows = int(math.ceil(num_robots_task / cols))
-
-                # Determine max length across robots
-                max_len = max(len(f) for f in per_robot_flat_frames)
-
-                # If no frames, skip
-                if max_len > 0:
-                    # Assume all frames share same H, W, C
-                    sample_frame = next(
-                        f for frames in per_robot_flat_frames for f in frames if frames
-                    )
-                    frame_h, frame_w, frame_c = sample_frame.shape
-
-                    matrix_frames: list[np.ndarray] = []
-                    black = np.zeros_like(sample_frame)
-
-                    for t_idx in range(max_len):
-                        canvas = np.zeros(
-                            (rows * frame_h, cols * frame_w, frame_c),
-                            dtype=sample_frame.dtype,
-                        )
-                        for r_idx in range(num_robots_task):
-                            frames_r = per_robot_flat_frames[r_idx]
-                            ep_ids_r = per_robot_flat_episode_ids[r_idx]
-                            if t_idx < len(frames_r):
-                                frm = frames_r[t_idx]
-                                ep_id = ep_ids_r[t_idx]
-                            else:
-                                frm = black
-                                ep_id = None
-                            row = r_idx // cols
-                            col = r_idx % cols
-                            y0 = row * frame_h
-                            x0 = col * frame_w
-                            canvas[y0 : y0 + frame_h, x0 : x0 + frame_w, :] = frm
-
-                        # Optionally overlay per-robot details in each cell
-                        img_pil = Image.fromarray(canvas)
-                        draw = ImageDraw.Draw(img_pil)
-                        try:
-                            font = ImageFont.load_default()
-                        except Exception:  # pragma: no cover
-                            font = None
-
-                        for r_idx in range(num_robots_task):
-                            ep_ids_r = per_robot_flat_episode_ids[r_idx]
-                            if t_idx < len(ep_ids_r):
-                                ep_id = ep_ids_r[t_idx]
-                            else:
-                                ep_id = None
-                            if ep_id is None:
-                                continue
-
-                            # Map from local index to global robot index and latency
-                            robot_idx_global = robot_indices[r_idx]
-                            latency_for_robot = _latency_for_robot(
-                                args, robot_idx_global
-                            )
-
-                            # Episode success flag, if available
-                            env = robot_envs[r_idx]
-                            success_flag = None
-                            if ep_id < len(env.episode_results):
-                                success_flag = bool(env.episode_results[ep_id])
-
-                            row = r_idx // cols
-                            col = r_idx % cols
-                            y0 = row * frame_h
-                            x0 = col * frame_w
-
-                            # Example label (no S/F here): "R0 ep1 200ms"
-                            label = f"R{robot_idx_global} ep{ep_id} {latency_for_robot:.0f}ms"
-
-                            # Small dark rectangle for readability (wider for more text)
-                            rect_w, rect_h = 120, 14
-                            draw.rectangle(
-                                [x0, y0, x0 + rect_w, y0 + rect_h],
-                                fill=(0, 0, 0, 160),
-                            )
-                            draw.text(
-                                (x0 + 2, y0 + 1),
-                                label,
-                                fill=(255, 255, 255),
-                                font=font,
-                            )
-
-                            # Draw a colored border to indicate success / failure
-                            # only at the end of the episode.
-                            if success_flag is not None and ep_id < len(
-                                per_robot_episode_last_indices[r_idx]
-                            ):
-                                last_idx_for_ep = per_robot_episode_last_indices[r_idx][
-                                    ep_id
-                                ]
-                                # Highlight on the last few frames of the episode
-                                if (
-                                    t_idx >= last_idx_for_ep - 4
-                                    and t_idx <= last_idx_for_ep
-                                ):
-                                    border_color = (
-                                        (0, 255, 0) if success_flag else (255, 0, 0)
-                                    )
-                                    # Top and bottom
-                                    draw.rectangle(
-                                        [x0, y0, x0 + frame_w - 1, y0 + 2],
-                                        outline=None,
-                                        fill=border_color,
-                                    )
-                                    draw.rectangle(
-                                        [
-                                            x0,
-                                            y0 + frame_h - 3,
-                                            x0 + frame_w - 1,
-                                            y0 + frame_h - 1,
-                                        ],
-                                        outline=None,
-                                        fill=border_color,
-                                    )
-                                    # Left and right
-                                    draw.rectangle(
-                                        [x0, y0, x0 + 2, y0 + frame_h - 1],
-                                        outline=None,
-                                        fill=border_color,
-                                    )
-                                    draw.rectangle(
-                                        [
-                                            x0 + frame_w - 3,
-                                            y0,
-                                            x0 + frame_w - 1,
-                                            y0 + frame_h - 1,
-                                        ],
-                                        outline=None,
-                                        fill=border_color,
-                                    )
-                        canvas = np.asarray(img_pil)
-
-                        matrix_frames.append(canvas)
-
-                    # Ensure output directory exists
-                    out_dir = pathlib.Path(args.video_out_path) / args.task_suite_name
-                    out_dir.mkdir(parents=True, exist_ok=True)
-                    out_path = out_dir / f"task_{task_id}_matrix.mp4"
-
-                    imageio.mimwrite(
-                        out_path,
-                        [np.asarray(x) for x in matrix_frames],
-                        fps=10,
-                    )
-                    logging.info(
-                        "Saved matrix video for task %d to %s", task_id, out_path
-                    )
-
             # Save JSON results for this task
             out_dir_json = pathlib.Path(args.video_out_path) / args.task_suite_name
             out_dir_json.mkdir(parents=True, exist_ok=True)
