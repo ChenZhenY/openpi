@@ -6,7 +6,6 @@ import math
 import pathlib
 import threading
 import time
-from typing import List
 
 import imageio
 import json
@@ -265,18 +264,6 @@ class Args:
     #################################################################################################################
     seed: int = 7  # Random Seed (for reproducibility)
     video_out_path: str = "data/libero/multi_robot_videos"
-
-
-def _partition_initial_states(
-    initial_states: np.ndarray, num_parts: int
-) -> List[np.ndarray]:
-    """Partition initial states into num_parts slices (round-robin)."""
-    parts: list[list[np.ndarray]] = [[] for _ in range(num_parts)]
-    for idx, state in enumerate(initial_states):
-        parts[idx % num_parts].append(state)
-    return [
-        np.stack(p) if p else np.empty((0,) + initial_states.shape[1:]) for p in parts
-    ]
 
 
 def _latency_for_robot(args: Args, robot_idx: int) -> float:
