@@ -272,7 +272,7 @@ async def benchmark(
     print("=" * 50)
 
     # Return results
-    return {
+    result: dict[str, Any] = {
         "date": datetime.now(tz=UTC).isoformat(),
         "host": host,
         "port": port,
@@ -296,6 +296,12 @@ async def benchmark(
         "errors": [o.error for o in outputs if not o.success],
         "policy_timing": [o.outputs["policy_timing"] for o in outputs if o.success],
     }
+
+    # Optional metadata fields
+    if "batch_timeout_ms" in metadata:
+        result["batch_timeout_ms"] = metadata["batch_timeout_ms"]
+
+    return result
 
 
 def main(args: argparse.Namespace) -> dict[str, Any]:
