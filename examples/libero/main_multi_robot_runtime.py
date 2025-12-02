@@ -11,216 +11,17 @@ import imageio
 import json
 import numpy as np
 from libero.libero import benchmark
-from libero.libero import get_libero_path
-from libero.libero.benchmark import Task
-from libero.libero.envs import OffScreenRenderEnv
 from openpi_client import action_chunk_broker
-from openpi_client import image_tools
 from openpi_client import websocket_client_policy as _websocket_client_policy
-from openpi_client.runtime import environment as _environment
 from openpi_client.runtime import runtime as _runtime
 from openpi_client.runtime.agents import policy_agent as _policy_agent
 import tyro
 
 from PIL import Image, ImageDraw, ImageFont
+from examples.libero import utils
+from examples.libero.env import LiberoSimEnvironment
 
-
-LIBERO_DUMMY_ACTION = [0.0] * 6 + [-1.0]
 LIBERO_ENV_RESOLUTION = 256  # resolution used to render training data
-
-
-def _quat2axisangle(quat):
-    """
-    Copied from robosuite: https://github.com/ARISE-Initiative/robosuite/blob/eafb81f54ffc104f905ee48a16bb15f059176ad3/robosuite/utils/transform_utils.py#L490C1-L512C55
-    """
-    # clip quaternion
-    if quat[3] > 1.0:
-        quat[3] = 1.0
-    elif quat[3] < -1.0:
-        quat[3] = -1.0
-
-    den = np.sqrt(1.0 - quat[3] * quat[3])
-    if math.isclose(den, 0.0):
-        # This is (close to) a zero degree rotation, immediately return
-        return np.zeros(3)
-
-    return (quat[:3] * 2.0 * math.acos(quat[3])) / den
-
-
-def _get_libero_env(
-    task: Task, resolution: int, seed: int
-) -> tuple[OffScreenRenderEnv, str]:
-    """Initializes and returns the LIBERO environment, along with the task description."""
-    task_description = task.language
-    task_bddl_file = (
-        pathlib.Path(get_libero_path("bddl_files"))
-        / task.problem_folder
-        / task.bddl_file
-    )
-    env_args = {
-        "bddl_file_name": task_bddl_file,
-        "camera_heights": resolution,
-        "camera_widths": resolution,
-    }
-    env = OffScreenRenderEnv(**env_args)
-    env.seed(
-        seed
-    )  # IMPORTANT: seed seems to affect object positions even when using fixed initial state
-    return env, task_description
-
-
-class LiberoSimEnvironment(_environment.Environment):
-    """Wraps OffScreenRenderEnv into the openpi_client.runtime.Environment interface.
-
-    This environment:
-    - Uses pre-collected initial states from LIBERO.
-    - On reset(), loads the next initial state and waits for objects to settle.
-    - get_observation() returns the dict expected by the Libero VLA policy.
-    - apply_action() steps the underlying simulator with the provided action.
-    """
-
-    def __init__(
-        self,
-        env: OffScreenRenderEnv,
-        task_description: str,
-        initial_states: np.ndarray,
-        *,
-        resize_size: int = 224,
-        num_steps_wait: int = 10,
-        max_episode_steps: int = 300,
-        latency_ms: float = 0.0,
-        control_hz: float = 100.0,
-    ) -> None:
-        self._env = env
-        self._task_description = task_description
-        self._initial_states = initial_states
-        self._resize_size = resize_size
-        self._num_steps_wait = num_steps_wait
-        self._max_episode_steps = max_episode_steps
-        self._latency_ms = latency_ms
-        self._control_hz = control_hz
-
-        self._episode_idx = 0
-        self._done = True
-        self._step_counter = 0
-        self._last_obs = None
-        self._episode_results: list[bool] = []
-        self._episode_frames: list[list[np.ndarray]] = []
-        self._current_frames: list[np.ndarray] = []
-        self._current_success = False
-
-    def reset(self) -> None:
-        """Reset environment to next initial state and wait for object stabilization."""
-        if self._episode_idx >= len(self._initial_states):
-            # Loop around if more episodes are requested than initial states.
-            self._episode_idx = 0
-
-        self._env.reset()
-        obs = self._env.set_init_state(self._initial_states[self._episode_idx])
-
-        # Let objects fall / settle
-        for _ in range(self._num_steps_wait):
-            obs, _, _, _ = self._env.step(LIBERO_DUMMY_ACTION)
-
-        self._last_obs = obs
-        self._done = False
-        self._step_counter = 0
-        self._current_frames = []
-        self._current_success = False
-        self._episode_idx += 1
-
-    def is_episode_complete(self) -> bool:
-        return self._done
-
-    def get_observation(self) -> dict:
-        if self._last_obs is None:
-            raise RuntimeError("Observation is not set. Call reset() first.")
-
-        obs = self._last_obs
-
-        # IMPORTANT: rotate 180 degrees to match train preprocessing
-        img = np.ascontiguousarray(obs["agentview_image"][::-1, ::-1])
-        wrist_img = np.ascontiguousarray(obs["robot0_eye_in_hand_image"][::-1, ::-1])
-        img = image_tools.convert_to_uint8(
-            image_tools.resize_with_pad(img, self._resize_size, self._resize_size)
-        )
-        wrist_img = image_tools.convert_to_uint8(
-            image_tools.resize_with_pad(wrist_img, self._resize_size, self._resize_size)
-        )
-
-        # Record frame for video (use the main agentview image)
-        self._current_frames.append(img)
-
-        return {
-            "observation/image": img,
-            "observation/wrist_image": wrist_img,
-            "observation/state": np.concatenate(
-                (
-                    obs["robot0_eef_pos"],
-                    _quat2axisangle(obs["robot0_eef_quat"]),
-                    obs["robot0_gripper_qpos"],
-                )
-            ),
-            "prompt": str(self._task_description),
-        }
-
-    def apply_action(self, action: dict) -> None:
-        """Take one or more low-level action steps in the LIBERO simulator.
-
-        To simulate latency affecting the environment, we optionally repeat
-        the same action for multiple simulator steps based on latency_ms and
-        control_hz, so higher latency results in fewer distinct decisions per
-        unit of simulated time.
-        """
-        # ActionChunkBroker returns a dict with key "actions"
-        act = action["actions"]
-
-        # Always execute at least one step with the new action
-        obs, _, done, info = self._env.step(act.tolist())
-        self._last_obs = obs
-        self._step_counter += 1
-
-        if done:
-            self._current_success = True
-
-        # Compute additional steps to simulate latency (repeat same action)
-        if not done and self._latency_ms > 0.0 and self._control_hz > 0.0:
-            extra_steps = int(round((self._latency_ms / 1000.0) * self._control_hz))
-            for _ in range(extra_steps):
-                if self._step_counter >= self._max_episode_steps or done:
-                    break
-                obs, _, done, info = self._env.step(act.tolist())
-                self._last_obs = obs
-                self._step_counter += 1
-
-                # Record a frame for each extra latency step so pauses show up in video
-                img = np.ascontiguousarray(obs["agentview_image"][::-1, ::-1])
-                img = image_tools.convert_to_uint8(
-                    image_tools.resize_with_pad(
-                        img, self._resize_size, self._resize_size
-                    )
-                )
-                self._current_frames.append(img)
-
-                if done:
-                    self._current_success = True
-
-        if done or self._step_counter >= self._max_episode_steps:
-            self._done = True
-            self._episode_results.append(self._current_success)
-            # Store frames for this episode
-            self._episode_frames.append(self._current_frames)
-            self._current_frames = []
-
-    @property
-    def episode_results(self) -> list[bool]:
-        """Per-episode success flags accumulated so far."""
-        return self._episode_results
-
-    @property
-    def episode_frames(self) -> list[list[np.ndarray]]:
-        """Per-episode list of recorded frames (each frame is HxWxC uint8)."""
-        return self._episode_frames
 
 
 @dataclasses.dataclass
@@ -399,7 +200,7 @@ def main(args: Args) -> None:
                 continue
 
             # Create LIBERO env for this robot
-            env_raw, task_description = _get_libero_env(
+            env_raw, task_description = utils._get_libero_env(
                 task,
                 LIBERO_ENV_RESOLUTION,
                 seed=args.seed + robot_idx,
