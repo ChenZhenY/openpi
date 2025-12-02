@@ -696,9 +696,7 @@ def main(args: Args) -> None:
         initial_states_list = initial_states_list[: args.num_trials]
 
     # Initialize websocket policy client
-    policy_client = _websocket_client_policy.WebsocketClientPolicy(
-        args.host, args.port, latency_ms=args.latency_ms
-    )
+    policy_client = _websocket_client_policy.WebsocketClientPolicy(args.host, args.port)
 
     # Prepare ActionChunkBroker parameters (only used if RTC mode is enabled)
     s = None

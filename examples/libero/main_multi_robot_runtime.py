@@ -79,11 +79,9 @@ def _latency_for_robot(args: Args, robot_idx: int) -> float:
 
 def _create_policy_agent(args: Args, robot_idx: int) -> _policy_agent.PolicyAgent:
     """Create a PolicyAgent that uses WebsocketClientPolicy + ActionChunkBroker."""
-    latency = _latency_for_robot(args, robot_idx)
     ws_client = _websocket_client_policy.WebsocketClientPolicy(
         args.host,
         args.port,
-        latency_ms=latency,
     )
     broker = action_chunk_broker.ActionChunkBroker(
         policy=ws_client,

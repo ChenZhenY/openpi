@@ -19,15 +19,12 @@ class WebsocketClientPolicy(_base_policy.BasePolicy):
     See WebsocketPolicyServer for a corresponding server implementation.
     """
 
-    def __init__(
-        self, host: str = "0.0.0.0", port: Optional[int] = None, api_key: Optional[str] = None, latency_ms: float = 0.0
-    ) -> None:
+    def __init__(self, host: str = "0.0.0.0", port: Optional[int] = None, api_key: Optional[str] = None) -> None:
         self._uri = f"ws://{host}"
         if port is not None:
             self._uri += f":{port}"
         self._packer = msgpack_numpy.Packer()
         self._api_key = api_key
-        self._latency_ms = latency_ms
         self._ws_lock = threading.Lock()  # Thread-safe WebSocket access
         self._ws, self._server_metadata = self._wait_for_server()
 
@@ -65,10 +62,6 @@ class WebsocketClientPolicy(_base_policy.BasePolicy):
             "d_param": d_param,
         }
         data = self._packer.pack(data)
-
-        # Inject artificial latency if specified
-        if self._latency_ms > 0:
-            time.sleep(self._latency_ms / 1000.0)
 
         # Use lock to ensure thread-safe WebSocket communication
         with self._ws_lock:
