@@ -23,13 +23,7 @@ from openpi_client.runtime import runtime as _runtime
 from openpi_client.runtime.agents import policy_agent as _policy_agent
 import tyro
 
-try:
-    from PIL import Image, ImageDraw, ImageFont
-
-    _PIL_AVAILABLE = True
-except ImportError:  # pragma: no cover - optional dependency
-    Image = ImageDraw = ImageFont = None  # type: ignore[assignment]
-    _PIL_AVAILABLE = False
+from PIL import Image, ImageDraw, ImageFont
 
 
 LIBERO_DUMMY_ACTION = [0.0] * 6 + [-1.0]
@@ -551,105 +545,104 @@ def main(args: Args) -> None:
                             canvas[y0 : y0 + frame_h, x0 : x0 + frame_w, :] = frm
 
                         # Optionally overlay per-robot details in each cell
-                        if _PIL_AVAILABLE:
-                            img_pil = Image.fromarray(canvas)
-                            draw = ImageDraw.Draw(img_pil)
-                            try:
-                                font = ImageFont.load_default()
-                            except Exception:  # pragma: no cover
-                                font = None
+                        img_pil = Image.fromarray(canvas)
+                        draw = ImageDraw.Draw(img_pil)
+                        try:
+                            font = ImageFont.load_default()
+                        except Exception:  # pragma: no cover
+                            font = None
 
-                            for r_idx in range(num_robots_task):
-                                ep_ids_r = per_robot_flat_episode_ids[r_idx]
-                                if t_idx < len(ep_ids_r):
-                                    ep_id = ep_ids_r[t_idx]
-                                else:
-                                    ep_id = None
-                                if ep_id is None:
-                                    continue
+                        for r_idx in range(num_robots_task):
+                            ep_ids_r = per_robot_flat_episode_ids[r_idx]
+                            if t_idx < len(ep_ids_r):
+                                ep_id = ep_ids_r[t_idx]
+                            else:
+                                ep_id = None
+                            if ep_id is None:
+                                continue
 
-                                # Map from local index to global robot index and latency
-                                robot_idx_global = robot_indices[r_idx]
-                                latency_for_robot = _latency_for_robot(
-                                    args, robot_idx_global
-                                )
+                            # Map from local index to global robot index and latency
+                            robot_idx_global = robot_indices[r_idx]
+                            latency_for_robot = _latency_for_robot(
+                                args, robot_idx_global
+                            )
 
-                                # Episode success flag, if available
-                                env = robot_envs[r_idx]
-                                success_flag = None
-                                if ep_id < len(env.episode_results):
-                                    success_flag = bool(env.episode_results[ep_id])
+                            # Episode success flag, if available
+                            env = robot_envs[r_idx]
+                            success_flag = None
+                            if ep_id < len(env.episode_results):
+                                success_flag = bool(env.episode_results[ep_id])
 
-                                row = r_idx // cols
-                                col = r_idx % cols
-                                y0 = row * frame_h
-                                x0 = col * frame_w
+                            row = r_idx // cols
+                            col = r_idx % cols
+                            y0 = row * frame_h
+                            x0 = col * frame_w
 
-                                # Example label (no S/F here): "R0 ep1 200ms"
-                                label = f"R{robot_idx_global} ep{ep_id} {latency_for_robot:.0f}ms"
+                            # Example label (no S/F here): "R0 ep1 200ms"
+                            label = f"R{robot_idx_global} ep{ep_id} {latency_for_robot:.0f}ms"
 
-                                # Small dark rectangle for readability (wider for more text)
-                                rect_w, rect_h = 120, 14
-                                draw.rectangle(
-                                    [x0, y0, x0 + rect_w, y0 + rect_h],
-                                    fill=(0, 0, 0, 160),
-                                )
-                                draw.text(
-                                    (x0 + 2, y0 + 1),
-                                    label,
-                                    fill=(255, 255, 255),
-                                    font=font,
-                                )
+                            # Small dark rectangle for readability (wider for more text)
+                            rect_w, rect_h = 120, 14
+                            draw.rectangle(
+                                [x0, y0, x0 + rect_w, y0 + rect_h],
+                                fill=(0, 0, 0, 160),
+                            )
+                            draw.text(
+                                (x0 + 2, y0 + 1),
+                                label,
+                                fill=(255, 255, 255),
+                                font=font,
+                            )
 
-                                # Draw a colored border to indicate success / failure
-                                # only at the end of the episode.
-                                if success_flag is not None and ep_id < len(
-                                    per_robot_episode_last_indices[r_idx]
+                            # Draw a colored border to indicate success / failure
+                            # only at the end of the episode.
+                            if success_flag is not None and ep_id < len(
+                                per_robot_episode_last_indices[r_idx]
+                            ):
+                                last_idx_for_ep = per_robot_episode_last_indices[r_idx][
+                                    ep_id
+                                ]
+                                # Highlight on the last few frames of the episode
+                                if (
+                                    t_idx >= last_idx_for_ep - 4
+                                    and t_idx <= last_idx_for_ep
                                 ):
-                                    last_idx_for_ep = per_robot_episode_last_indices[
-                                        r_idx
-                                    ][ep_id]
-                                    # Highlight on the last few frames of the episode
-                                    if (
-                                        t_idx >= last_idx_for_ep - 4
-                                        and t_idx <= last_idx_for_ep
-                                    ):
-                                        border_color = (
-                                            (0, 255, 0) if success_flag else (255, 0, 0)
-                                        )
-                                        # Top and bottom
-                                        draw.rectangle(
-                                            [x0, y0, x0 + frame_w - 1, y0 + 2],
-                                            outline=None,
-                                            fill=border_color,
-                                        )
-                                        draw.rectangle(
-                                            [
-                                                x0,
-                                                y0 + frame_h - 3,
-                                                x0 + frame_w - 1,
-                                                y0 + frame_h - 1,
-                                            ],
-                                            outline=None,
-                                            fill=border_color,
-                                        )
-                                        # Left and right
-                                        draw.rectangle(
-                                            [x0, y0, x0 + 2, y0 + frame_h - 1],
-                                            outline=None,
-                                            fill=border_color,
-                                        )
-                                        draw.rectangle(
-                                            [
-                                                x0 + frame_w - 3,
-                                                y0,
-                                                x0 + frame_w - 1,
-                                                y0 + frame_h - 1,
-                                            ],
-                                            outline=None,
-                                            fill=border_color,
-                                        )
-                            canvas = np.asarray(img_pil)
+                                    border_color = (
+                                        (0, 255, 0) if success_flag else (255, 0, 0)
+                                    )
+                                    # Top and bottom
+                                    draw.rectangle(
+                                        [x0, y0, x0 + frame_w - 1, y0 + 2],
+                                        outline=None,
+                                        fill=border_color,
+                                    )
+                                    draw.rectangle(
+                                        [
+                                            x0,
+                                            y0 + frame_h - 3,
+                                            x0 + frame_w - 1,
+                                            y0 + frame_h - 1,
+                                        ],
+                                        outline=None,
+                                        fill=border_color,
+                                    )
+                                    # Left and right
+                                    draw.rectangle(
+                                        [x0, y0, x0 + 2, y0 + frame_h - 1],
+                                        outline=None,
+                                        fill=border_color,
+                                    )
+                                    draw.rectangle(
+                                        [
+                                            x0 + frame_w - 3,
+                                            y0,
+                                            x0 + frame_w - 1,
+                                            y0 + frame_h - 1,
+                                        ],
+                                        outline=None,
+                                        fill=border_color,
+                                    )
+                        canvas = np.asarray(img_pil)
 
                         matrix_frames.append(canvas)
 
