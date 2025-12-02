@@ -178,4 +178,5 @@ secrets/
 
 # Outputs
 logs/
+log/
 benchmarks/

@@ -29,18 +29,26 @@ class WebsocketPolicyServer:
         port: int | None = None,
         metadata: dict | None = None,
         batch_size: int = 1,
+        batch_timeout_ms: int = 0,
     ) -> None:
         self._policy_factory = policy_factory
         self._host = host
         self._port = port
         self._metadata = metadata or {}
         self._batch_size = batch_size
+        # Maximum time (in ms) to wait after the first request in a batch
+        # for additional requests before running inference. A value of 0
+        # disables waiting and processes whatever is available immediately.
+        self._batch_timeout_ms = batch_timeout_ms
 
         # Create unique IPC endpoint for ZeroMQ ROUTER/DEALER socket
         socket_id = uuid.uuid4().hex[:8]
         self._endpoint = f"ipc:///tmp/openpi_{socket_id}"
 
-        self._worker = mp.Process(target=self.worker, args=(self._endpoint, self._batch_size))
+        self._worker = mp.Process(
+            target=self.worker,
+            args=(self._endpoint, self._batch_size, self._batch_timeout_ms),
+        )
         self.responses = dict[int, asyncio.futures.Future]()
         self._worker_identity: bytes | None = None  # Worker identity (learned from first message)
         self.last_request_id = 0
@@ -125,7 +133,7 @@ class WebsocketPolicyServer:
             except Exception as e:
                 logger.error(f"Error processing response: {e}", exc_info=True)
 
-    def worker(self, endpoint: str, batch_size: int):
+    def worker(self, endpoint: str, batch_size: int, batch_timeout_ms: int):
         """Worker process that uses DEALER socket to communicate with ROUTER.
 
         DEALER automatically handles identity frames - it strips identity when receiving
@@ -169,9 +177,11 @@ class WebsocketPolicyServer:
                 request_ids.append(request_id)
                 batch.append(obs)
 
-                # Collect additional messages immediately (non-blocking) up to batch_size
+                # Collect additional messages up to batch_size, waiting up to batch_timeout_ms
+                # after the first request. A timeout of 0 means "do not wait" and only grab
+                # requests that are already queued.
                 while len(batch) < batch_size:
-                    socks = dict(poller.poll(timeout=0))  # Non-blocking check
+                    socks = dict(poller.poll(timeout=batch_timeout_ms))
                     if socket in socks and socks[socket] == zmq.POLLIN:
                         # DEALER receives messages without identity frame
                         request_id, obs = socket.recv_pyobj()
