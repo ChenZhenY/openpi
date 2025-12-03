@@ -4,6 +4,7 @@ from openpi_client import image_tools
 from libero.libero.envs import OffScreenRenderEnv
 from examples.libero import utils
 from typing import List
+from typing_extensions import override
 
 LIBERO_DUMMY_ACTION = [0.0] * 6 + [-1.0]
 
@@ -156,3 +157,7 @@ class LiberoSimEnvironment(_environment.Environment):
     @property
     def current_success(self) -> bool:
         return self._current_success
+
+    @override
+    def close(self) -> None:
+        self._env.close()

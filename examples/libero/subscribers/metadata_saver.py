@@ -8,6 +8,7 @@ from openpi_client.runtime import subscriber as _subscriber
 from typing_extensions import override
 from openpi_client import action_chunk_broker
 from examples.libero.env import LiberoSimEnvironment
+from dataclasses import asdict
 
 
 class MetadataSaver(_subscriber.Subscriber):
@@ -45,7 +46,9 @@ class MetadataSaver(_subscriber.Subscriber):
             metadata = {
                 "timestamps": self._timestamps,
                 "action_chunk_indices": self._action_chunk_indices,
-                "action_chunks": self._action_chunk_broker.action_chunks,
+                "action_chunks": [
+                    asdict(ac) for ac in self._action_chunk_broker.action_chunks
+                ],
                 "success": self._environment.current_success,
             }
             json.dump(metadata, f)

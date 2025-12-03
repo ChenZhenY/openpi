@@ -20,11 +20,10 @@ class VideoSaver(_subscriber.Subscriber):
     def on_episode_start(self) -> None:
         self._images = []
 
+    # TODO: make observation a dataclass
     @override
     def on_step(self, observation: dict, action: dict) -> None:
-        im = observation["images"]["cam_high"]  # [C, H, W]
-        im = np.transpose(im, (1, 2, 0))  # [H, W, C]
-        self._images.append(im)
+        self._images.append(observation["observation/image"])
 
     @override
     def on_episode_end(self) -> None:

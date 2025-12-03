@@ -15,7 +15,6 @@ class ActionChunk:
     chunk_index: int
     request_timestamp: float
     response_timestamp: float
-    actions: np.ndarray
 
 
 class ActionChunkBroker(_base_policy.BasePolicy):
@@ -73,7 +72,6 @@ class ActionChunkBroker(_base_policy.BasePolicy):
                         chunk_index=len(self._action_chunks),
                         request_timestamp=request_timestamp,
                         response_timestamp=response_timestamp,
-                        actions=self._background_results["actions"],
                     )
                 )
                 self._background_running = False
@@ -85,7 +83,17 @@ class ActionChunkBroker(_base_policy.BasePolicy):
         if self._is_rtc:
             # init
             if self._last_results is None:
+                # TODO: refactor
+                request_timestamp = time.time()
                 self._last_results = self._policy.infer(obs, None, self._is_rtc, s_param=self._s, d_param=self._d)
+                response_timestamp = time.time()
+                self._action_chunks.append(
+                    ActionChunk(
+                        chunk_index=len(self._action_chunks),
+                        request_timestamp=request_timestamp,
+                        response_timestamp=response_timestamp,
+                    )
+                )
                 assert isinstance(self._last_results, dict), "last_results must be a dict"
                 self._last_origin_actions = self._last_results["origin_actions"]
                 self._last_state = self._last_results["state"]
@@ -109,7 +117,17 @@ class ActionChunkBroker(_base_policy.BasePolicy):
 
         else:
             if self._last_results is None:
+                # TODO: refactor
+                request_timestamp = time.time()
                 self._last_results = self._policy.infer(obs, use_rtc=self._is_rtc, s_param=self._s, d_param=self._d)
+                response_timestamp = time.time()
+                self._action_chunks.append(
+                    ActionChunk(
+                        chunk_index=len(self._action_chunks),
+                        request_timestamp=request_timestamp,
+                        response_timestamp=response_timestamp,
+                    )
+                )
                 self._cur_step = 0
 
             self._last_results = {"actions": self._last_results["actions"]}

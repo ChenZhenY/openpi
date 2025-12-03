@@ -92,3 +92,7 @@ class Runtime:
             self._max_episode_steps > 0 and self._episode_steps >= self._max_episode_steps
         ):
             self.mark_episode_complete()
+
+    def close(self) -> None:
+        """Closes the runtime."""
+        self._environment.close()
