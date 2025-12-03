@@ -49,7 +49,6 @@ class ActionChunkBroker(_base_policy.BasePolicy):
         self._s = s  # 25
         self._d = d  # 10
         self._is_rtc = is_rtc
-        print(f"initialized with s: {s}, d: {d}")
         if self._is_rtc:
             self._infer_thread = threading.Thread(target=self._background_infer)
             self._infer_thread.start()

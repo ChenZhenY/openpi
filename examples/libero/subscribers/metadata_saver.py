@@ -14,14 +14,21 @@ from dataclasses import asdict
 class MetadataSaver(_subscriber.Subscriber):
     """Saves episode data."""
 
+    # TODO: probably pass metadata with dataclass
     def __init__(
         self,
         out_dir: pathlib.Path,
         environment: LiberoSimEnvironment,
         action_chunk_broker: action_chunk_broker.ActionChunkBroker,
+        task_suite_name: str,
+        task_id: int,
+        robot_idx: int,
     ) -> None:
         out_dir.mkdir(parents=True, exist_ok=True)
         self._out_dir = out_dir
+        self._task_suite_name = task_suite_name
+        self._task_id = task_id
+        self._robot_idx = robot_idx
         self._environment = environment
         self._action_chunk_broker = action_chunk_broker
         self._timestamps: List[float] = []
@@ -49,6 +56,9 @@ class MetadataSaver(_subscriber.Subscriber):
         logging.info(f"Saving metadata to {out_path}")
         with open(self._out_dir / "metadata.json", "w") as f:
             metadata = {
+                "task_suite_name": self._task_suite_name,
+                "task_id": self._task_id,
+                "robot_idx": self._robot_idx,
                 "timestamps": self._timestamps,
                 "action_chunk_indices": self._action_chunk_indices,
                 "action_chunks": [

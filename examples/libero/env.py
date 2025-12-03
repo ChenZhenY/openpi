@@ -52,8 +52,8 @@ class LiberoSimEnvironment(_environment.Environment):
     def reset(self) -> None:
         """Reset environment to next initial state and wait for object stabilization."""
         if self._episode_idx >= len(self._initial_states):
-            # Loop around if more episodes are requested than initial states.
-            raise ValueError("No more initial states to reset to.")
+            # TODO: need to decide semantics here
+            return
 
         self._env.reset()
         obs = self._env.set_init_state(self._initial_states[self._episode_idx])

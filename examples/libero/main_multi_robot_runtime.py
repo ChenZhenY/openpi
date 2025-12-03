@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import dataclasses
+import pandas as pd
+import json
 import logging
 import pathlib
 import multiprocessing
@@ -12,6 +13,7 @@ from openpi_client import websocket_client_policy as _websocket_client_policy
 from openpi_client.runtime import runtime as _runtime
 from openpi_client.runtime.agents import policy_agent as _policy_agent
 import tyro
+from dataclasses import dataclass, asdict, field
 
 from examples.libero import utils
 from examples.libero.env import LiberoSimEnvironment
@@ -21,7 +23,7 @@ from examples.libero.subscribers.video_saver import VideoSaver
 LIBERO_ENV_RESOLUTION = 256  # resolution used to render training data
 
 
-@dataclasses.dataclass
+@dataclass
 class Args:
     #################################################################################################################
     # Model server parameters
@@ -32,7 +34,7 @@ class Args:
     action_horizon: int = (
         10  # Action horizon for ActionChunkBroker (matches Libero model config)
     )
-    latency_ms: list[float] = dataclasses.field(
+    latency_ms: list[float] = field(
         default_factory=list
     )  # Optional per-robot artificial latency (ms); length <= num_robots
 
@@ -61,7 +63,7 @@ class Args:
     # Utils
     #################################################################################################################
     seed: int = 7  # Random Seed (for reproducibility)
-    video_out_path: str = "data/libero/multi_robot_videos"
+    output_dir: str = "data/libero/multi_robot_videos"
     overwrite: bool = False
 
 
@@ -75,63 +77,25 @@ def _latency_for_robot(args: Args, robot_idx: int) -> float:
     return float(args.latency_ms[-1])
 
 
-def create_runtime(args: Args, robot_idx: int, task_id: int) -> _runtime.Runtime:
-    benchmark_dict = benchmark.get_benchmark_dict()
-    task_suite = benchmark_dict[args.task_suite_name]()
-    num_tasks_in_suite = task_suite.n_tasks
-
-    logging.info(
-        "Setting up multi-robot LIBERO runtime over suite '%s' with %d tasks, num_robots=%d, trials_per_robot=%d",
-        args.task_suite_name,
-        num_tasks_in_suite,
-        args.num_robots,
-        args.num_trials_per_robot,
-    )
-
-    task = task_suite.get_task(task_id)
-    all_initial_states = task_suite.get_task_init_states(task_id)
-
-    if len(all_initial_states) == 0:
-        logging.warning("Task %d has no initial states; skipping", task_id)
-        raise ValueError(f"Task {task_id} has no initial states")
-
-    logging.info(
-        "Task %d: %d initial states, launching up to %d robots",
-        task_id,
-        len(all_initial_states),
-        args.num_robots,
-    )
-    # Build per-robot initial states for this task.
-    # Each robot gets num_trials_per_robot episodes, cycling through available initial states if needed.
-    n_init = len(all_initial_states)
-    per_robot_states: list[np.ndarray] = []
-    for i in range(args.num_robots):
-        idxs = [
-            (i * args.num_trials_per_robot + ep_idx) % n_init
-            for ep_idx in range(args.num_trials_per_robot)
-        ]
-        per_robot_states.append(all_initial_states[idxs])
-    init_states_robot = per_robot_states[robot_idx]
-
+def create_runtime(args: Args, robot_idx: int, job: Job) -> _runtime.Runtime:
     # Create LIBERO env for this robot
+    # TODO: cache this if slow
+
     env_raw, task_description = utils._get_libero_env(
-        task,
+        job.task,
         LIBERO_ENV_RESOLUTION,
         seed=args.seed + robot_idx,
     )
     env = LiberoSimEnvironment(
         env=env_raw,
         task_description=task_description,
-        initial_states=init_states_robot,
+        initial_states=job.initial_state,
         resize_size=args.resize_size,
         num_steps_wait=args.num_steps_wait,
         max_episode_steps=args.max_steps,
         latency_ms=_latency_for_robot(args, robot_idx),
         control_hz=args.control_hz,
     )
-
-    # Number of episodes this robot will run equals number of its assigned initial states
-    num_episodes = len(init_states_robot)
 
     # Create policy agent for this robot (with optional per-robot latency)
     ws_client = _websocket_client_policy.WebsocketClientPolicy(
@@ -152,52 +116,55 @@ def create_runtime(args: Args, robot_idx: int, task_id: int) -> _runtime.Runtime
         agent=agent,
         subscribers=[
             MetadataSaver(
-                out_dir=pathlib.Path(args.video_out_path)
+                out_dir=pathlib.Path(args.output_dir)
                 / str(robot_idx)
                 / args.task_suite_name,
                 environment=env,
                 action_chunk_broker=broker,
+                task_suite_name=job.task_suite_name,
+                task_id=job.task_id,
+                robot_idx=robot_idx,
             ),
             VideoSaver(
-                out_dir=pathlib.Path(args.video_out_path)
+                out_dir=pathlib.Path(args.output_dir)
                 / str(robot_idx)
                 / args.task_suite_name,
             ),
             # ProgressSubscriber() # TODO
         ],
         max_hz=args.control_hz,
-        num_episodes=num_episodes,
+        num_episodes=1,
         max_episode_steps=env._max_episode_steps,  # type: ignore[attr-defined]
     )
     return runtime
 
 
-def _robot_wrapper(args: Args, robot_idx: int, task_id: int) -> None:
-    runtime = create_runtime(args, robot_idx, task_id)
+def _robot_wrapper(wrapper_args) -> None:
+    args, robot_idx, job = wrapper_args
+    runtime = create_runtime(args, robot_idx, job)
     runtime.run()
     runtime.close()
 
 
-def run_robots(args: Args, robot_indices: list[int], task_id: int) -> None:
+def run_robots(args: Args, jobs: list[Job]) -> None:
     # TODO: rich multiprocessing progress
-    processes = [
-        multiprocessing.Process(target=_robot_wrapper, args=(args, robot_idx, task_id))
-        for robot_idx in robot_indices
-    ]
-    for process in processes:
-        process.start()
-    for process in processes:
-        process.join()
+    # TODO: make use of initializer
+    with multiprocessing.Pool(processes=args.num_robots) as pool:
+        pool.map(
+            _robot_wrapper,
+            [(args, robot_idx, job) for robot_idx, job in enumerate(jobs)],
+        )
 
 
-def main(args: Args) -> None:
-    if not args.overwrite and pathlib.Path(args.video_out_path).exists():
-        raise ValueError(f"Output path {args.video_out_path} already exists")
+@dataclass
+class Job:
+    task: benchmark.Task
+    task_suite_name: str
+    task_id: int
+    initial_state: np.ndarray
 
-    # Set random seed
-    np.random.seed(args.seed)
 
-    # Initialize LIBERO task suite
+def create_jobs(args: Args) -> list[Job]:
     benchmark_dict = benchmark.get_benchmark_dict()
     task_suite = benchmark_dict[args.task_suite_name]()
     num_tasks_in_suite = task_suite.n_tasks
@@ -210,99 +177,84 @@ def main(args: Args) -> None:
         args.num_trials_per_robot,
     )
 
-    # TODO: should just distribute all tasks across robots
-    # global_results: list[dict] = []
-
+    jobs: list[Job] = []
     for task_id in range(num_tasks_in_suite):
-        run_robots(args, list(range(args.num_robots)), task_id)
-        break
+        task = task_suite.get_task(task_id)
+        all_initial_states = task_suite.get_task_init_states(task_id)
 
-        # Aggregate per-task stats
-        # task_episodes = sum(r["episodes"] for r in task_results)
-        # task_successes = sum(r["successes"] for r in task_results)
-        # task_success_rate = (
-        #     (task_successes / task_episodes) if task_episodes > 0 else 0.0
-        # )
+        if len(all_initial_states) < args.num_trials_per_robot:
+            logging.error(
+                "Task %d has less initial states than trials per robot; skipping",
+                task_id,
+            )
+            continue
 
-        # logging.info(
-        #     "Task %d complete: episodes=%d, successes=%d (%.1f%%)",
-        #     task_id,
-        #     task_episodes,
-        #     task_successes,
-        #     task_success_rate * 100.0,
-        # )
+        for i in range(args.num_trials_per_robot):
+            initial_state = all_initial_states[
+                None, i
+            ]  # FIXME: LiberoSimEnvironment expects a batch of initial states, clean up these semantics
+            job = Job(
+                task=task,
+                task_suite_name=args.task_suite_name,
+                task_id=task_id,
+                initial_state=initial_state,
+            )
+            jobs.append(job)
 
-        # TODO: compute, print, and save task-level stats
-        # Build and save matrix video + JSON for this task from robot_envs
-        # try:
-        #     # Save JSON results for this task
-        #     out_dir_json = pathlib.Path(args.video_out_path) / args.task_suite_name
-        #     out_dir_json.mkdir(parents=True, exist_ok=True)
-        #     json_path = out_dir_json / f"task_{task_id}_results.json"
+    logging.info("Created %d jobs", len(jobs))
 
-        #     robots_json: list[dict] = []
-        #     for env, r_idx in zip(robot_envs, robot_indices):
-        #         episodes_json: list[dict] = []
-        #         for ep_idx, success in enumerate(env.episode_results):
-        #             num_frames = (
-        #                 len(env.episode_frames[ep_idx])
-        #                 if ep_idx < len(env.episode_frames)
-        #                 else 0
-        #             )
-        #             episodes_json.append(
-        #                 {
-        #                     "episode_idx": ep_idx,
-        #                     "success": bool(success),
-        #                     "num_frames": num_frames,
-        #                 }
-        #             )
-        #         robots_json.append(
-        #             {
-        #                 "robot_idx": r_idx,
-        #                 "latency_ms": _latency_for_robot(args, r_idx),
-        #                 "episodes": episodes_json,
-        #             }
-        #         )
+    return jobs
 
-        #     task_json = {
-        #         "task_id": task_id,
-        #         "task_suite_name": args.task_suite_name,
-        #         "num_robots": args.num_robots,
-        #         "num_trials_per_robot": args.num_trials_per_robot,
-        #         "summary": {
-        #             "episodes": task_episodes,
-        #             "successes": task_successes,
-        #             "success_rate": task_success_rate,
-        #         },
-        #         "robots": robots_json,
-        #     }
 
-        #     with json_path.open("w") as f:
-        #         json.dump(task_json, f, indent=2)
-        #     logging.info("Saved JSON results for task %d to %s", task_id, json_path)
-        # except Exception as e:
-        #     logging.error("Failed to create matrix video for task %d: %s", task_id, e)
+@dataclass
+class Result:
+    success: bool
+    robot_idx: int
+    task_suite_name: str
+    task_id: int
 
-        # for r in task_results:
-        #     r_with_task = dict(r)
-        #     r_with_task["task_id"] = task_id
-        #     global_results.append(r_with_task)
+    @classmethod
+    def from_metadata_file(cls, metadata_file: pathlib.Path) -> Result:
+        with open(metadata_file, "r") as f:
+            metadata = json.load(f)
+            return cls(
+                success=metadata["success"],
+                robot_idx=metadata["robot_idx"],
+                task_suite_name=metadata["task_suite_name"],
+                task_id=metadata["task_id"],
+            )
 
-    # Aggregate global stats across all tasks
-    # TODO: global stats
-    # total_episodes = sum(r["episodes"] for r in global_results)
-    # total_successes = sum(r["successes"] for r in global_results)
-    # total_success_rate = (
-    #     (total_successes / total_episodes) if total_episodes > 0 else 0.0
-    # )
 
-    # logging.info("=== Multi-robot LIBERO evaluation over entire suite complete ===")
-    # logging.info(
-    #     "Total episodes: %d, total successes: %d (%.1f%%)",
-    #     total_episodes,
-    #     total_successes,
-    #     total_success_rate * 100.0,
-    # )
+def aggregate_results(output_path: pathlib.Path) -> None:
+    metadata_files = list(output_path.glob("**/metadata.json"))
+
+    results: list[Result] = []
+    for metadata_file in metadata_files:
+        result = Result.from_metadata_file(metadata_file)
+        results.append(result)
+
+    results_df = pd.DataFrame([asdict(result) for result in results])
+    results_df.to_csv(output_path / "results.csv", index=False)
+    summary = results_df.groupby(["task_suite_name", "task_id"]).agg(
+        {
+            "success": "mean",
+        }
+    )
+    summary.reset_index().to_csv(output_path / "summary.csv", index=False)
+    # TODO: rich
+    print(summary)
+    print("Total success rate: ", summary["success"].mean())
+
+
+def main(args: Args) -> None:
+    if not args.overwrite and pathlib.Path(args.output_dir).exists():
+        raise ValueError(f"Output path {args.output_dir} already exists")
+
+    np.random.seed(args.seed)
+
+    jobs = create_jobs(args)
+    run_robots(args, jobs)
+    aggregate_results(pathlib.Path(args.output_dir))
 
 
 if __name__ == "__main__":
