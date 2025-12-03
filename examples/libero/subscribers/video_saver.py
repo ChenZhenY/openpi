@@ -28,13 +28,9 @@ class VideoSaver(_subscriber.Subscriber):
     # TODO: "folder/robot_idx/<index>_<task_suite_name>_<task_id>_<success>/out_<index>.mp4"
     @override
     def on_episode_end(self) -> None:
-        existing = list(self._out_dir.glob("out_[0-9]*.mp4"))
-        next_idx = max([int(p.stem.split("_")[1]) for p in existing], default=-1) + 1
-        out_path = self._out_dir / f"out_{next_idx}.mp4"
-
-        logging.info(f"Saving video to {out_path}")
+        logging.info(f"Saving video to {self._out_dir / 'out.mp4'}")
         imageio.mimwrite(
-            out_path,
+            self._out_dir / "out.mp4",
             [np.asarray(x) for x in self._images[:: self._subsample]],
             fps=50 // max(1, self._subsample),
         )

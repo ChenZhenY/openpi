@@ -118,7 +118,7 @@ def create_runtime(args: Args, robot_idx: int, job: Job) -> _runtime.Runtime:
             MetadataSaver(
                 out_dir=pathlib.Path(args.output_dir)
                 / str(robot_idx)
-                / args.task_suite_name,
+                / (args.task_suite_name + "_" + str(job.task_id)),
                 environment=env,
                 action_chunk_broker=broker,
                 task_suite_name=job.task_suite_name,
@@ -128,7 +128,7 @@ def create_runtime(args: Args, robot_idx: int, job: Job) -> _runtime.Runtime:
             VideoSaver(
                 out_dir=pathlib.Path(args.output_dir)
                 / str(robot_idx)
-                / args.task_suite_name,
+                / (args.task_suite_name + "_" + str(job.task_id)),
             ),
             # ProgressSubscriber() # TODO
         ],
@@ -139,21 +139,34 @@ def create_runtime(args: Args, robot_idx: int, job: Job) -> _runtime.Runtime:
     return runtime
 
 
-def _robot_wrapper(wrapper_args) -> None:
-    args, robot_idx, job = wrapper_args
-    runtime = create_runtime(args, robot_idx, job)
-    runtime.run()
-    runtime.close()
+def _robot_worker(args: Args, robot_idx: int, jobs: list[Job]) -> None:
+    """Worker process that handles jobs for a specific robot index."""
+    for job in jobs:
+        runtime = create_runtime(args, robot_idx, job)
+        runtime.run()
+        runtime.close()
 
 
 def run_robots(args: Args, jobs: list[Job]) -> None:
     # TODO: rich multiprocessing progress
-    # TODO: make use of initializer
-    with multiprocessing.Pool(processes=args.num_robots) as pool:
-        pool.map(
-            _robot_wrapper,
-            [(args, robot_idx, job) for robot_idx, job in enumerate(jobs)],
+    # Distribute jobs across robots (round-robin)
+    jobs_per_robot: list[list[Job]] = [[] for _ in range(args.num_robots)]
+    for idx, job in enumerate(jobs):
+        jobs_per_robot[idx % args.num_robots].append(job)
+
+    # Create one process per robot, each with its index (0 to num_robots-1)
+    processes = []
+    for robot_idx in range(args.num_robots):
+        p = multiprocessing.Process(
+            target=_robot_worker,
+            args=(args, robot_idx, jobs_per_robot[robot_idx]),
         )
+        p.start()
+        processes.append(p)
+
+    # Wait for all processes to complete
+    for p in processes:
+        p.join()
 
 
 @dataclass
@@ -206,6 +219,7 @@ def create_jobs(args: Args) -> list[Job]:
     return jobs
 
 
+# TODO: refactor in metadata dataclass and put with metadata_saver
 @dataclass
 class Result:
     success: bool

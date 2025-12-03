@@ -104,6 +104,7 @@ def grid_videos(videos, output, cols, rows, duration):
 
     clips = []
     for video in videos:
+        print(video.path, video.col, video.row, video.start_time)
         clip = VideoFileClip(str(video.path))
         clip = clip.set_position((video.col * w, video.row * h)).set_start(
             video.start_time
@@ -124,19 +125,25 @@ def load_timestamps(output_path: pathlib.Path) -> Dict[pathlib.Path, List[Timest
     }
 
 
+def load_robot_idx(output_path: pathlib.Path) -> Dict[pathlib.Path, int]:
+    paths = list(output_path.glob("**/metadata.json"))
+    return {path.parent: json.load(open(path))["robot_idx"] for path in paths}
+
+
 def combine_videos(output_path: pathlib.Path) -> None:
-    video_paths = list(output_path.glob("**/out_*.mp4"))
+    video_paths = list(output_path.glob("**/out.mp4"))
     timestamps = load_timestamps(output_path)
+    robot_idx = load_robot_idx(output_path)
     min_timestamp = min(
         [min([t.timestamp for t in timestamps[path]]) for path in timestamps]
     )
 
     # video_paths = list(output_path.glob("**/out_*_annotated.mp4")) # TODO: eventually combine annotated videos
-    rows, cols = get_grid_dimensions(len(video_paths))
+    rows, cols = get_grid_dimensions(4)
     videos = [
         Video(
             path,
-            *get_grid_index(i, (rows, cols)),
+            *get_grid_index(robot_idx[path.parent], (rows, cols)),
             start_time=timestamps[path.parent][0].timestamp - min_timestamp,
         )
         for i, path in enumerate(video_paths)
