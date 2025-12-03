@@ -25,6 +25,7 @@ class VideoSaver(_subscriber.Subscriber):
     def on_step(self, observation: dict, action: dict) -> None:
         self._images.append(observation["observation/image"])
 
+    # TODO: "folder/robot_idx/<index>_<task_suite_name>_<task_id>_<success>/out_<index>.mp4"
     @override
     def on_episode_end(self) -> None:
         existing = list(self._out_dir.glob("out_[0-9]*.mp4"))

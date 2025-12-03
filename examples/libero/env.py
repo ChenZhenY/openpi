@@ -11,6 +11,7 @@ LIBERO_DUMMY_ACTION = [0.0] * 6 + [-1.0]
 
 class LiberoSimEnvironment(_environment.Environment):
     """Wraps OffScreenRenderEnv into the openpi_client.runtime.Environment interface.
+    Runs episodes for different initial states for ONLY ONE task.
 
     This environment:
     - Uses pre-collected initial states from LIBERO.
@@ -52,7 +53,7 @@ class LiberoSimEnvironment(_environment.Environment):
         """Reset environment to next initial state and wait for object stabilization."""
         if self._episode_idx >= len(self._initial_states):
             # Loop around if more episodes are requested than initial states.
-            self._episode_idx = 0
+            raise ValueError("No more initial states to reset to.")
 
         self._env.reset()
         obs = self._env.set_init_state(self._initial_states[self._episode_idx])

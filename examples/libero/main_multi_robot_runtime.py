@@ -62,6 +62,7 @@ class Args:
     #################################################################################################################
     seed: int = 7  # Random Seed (for reproducibility)
     video_out_path: str = "data/libero/multi_robot_videos"
+    overwrite: bool = False
 
 
 def _latency_for_robot(args: Args, robot_idx: int) -> float:
@@ -87,8 +88,6 @@ def create_runtime(args: Args, robot_idx: int, task_id: int) -> _runtime.Runtime
         args.num_trials_per_robot,
     )
 
-    # global_results: list[dict] = []
-
     task = task_suite.get_task(task_id)
     all_initial_states = task_suite.get_task_init_states(task_id)
 
@@ -106,13 +105,12 @@ def create_runtime(args: Args, robot_idx: int, task_id: int) -> _runtime.Runtime
     # Each robot gets num_trials_per_robot episodes, cycling through available initial states if needed.
     n_init = len(all_initial_states)
     per_robot_states: list[np.ndarray] = []
-    for robot_idx in range(args.num_robots):
+    for i in range(args.num_robots):
         idxs = [
-            (robot_idx * args.num_trials_per_robot + ep_idx) % n_init
+            (i * args.num_trials_per_robot + ep_idx) % n_init
             for ep_idx in range(args.num_trials_per_robot)
         ]
         per_robot_states.append(all_initial_states[idxs])
-
     init_states_robot = per_robot_states[robot_idx]
 
     # Create LIBERO env for this robot
@@ -154,13 +152,16 @@ def create_runtime(args: Args, robot_idx: int, task_id: int) -> _runtime.Runtime
         agent=agent,
         subscribers=[
             MetadataSaver(
-                out_dir=pathlib.Path(args.video_out_path) / args.task_suite_name,
+                out_dir=pathlib.Path(args.video_out_path)
+                / str(robot_idx)
+                / args.task_suite_name,
                 environment=env,
                 action_chunk_broker=broker,
             ),
-            # TODO: runtimes should output to different paths
             VideoSaver(
-                out_dir=pathlib.Path(args.video_out_path) / args.task_suite_name,
+                out_dir=pathlib.Path(args.video_out_path)
+                / str(robot_idx)
+                / args.task_suite_name,
             ),
             # ProgressSubscriber() # TODO
         ],
@@ -171,9 +172,7 @@ def create_runtime(args: Args, robot_idx: int, task_id: int) -> _runtime.Runtime
     return runtime
 
 
-# def _robot_wrapper(task_args) -> None:
 def _robot_wrapper(args: Args, robot_idx: int, task_id: int) -> None:
-    # args, robot_idx, task_id = task_args
     runtime = create_runtime(args, robot_idx, task_id)
     runtime.run()
     runtime.close()
@@ -192,6 +191,9 @@ def run_robots(args: Args, robot_indices: list[int], task_id: int) -> None:
 
 
 def main(args: Args) -> None:
+    if not args.overwrite and pathlib.Path(args.video_out_path).exists():
+        raise ValueError(f"Output path {args.video_out_path} already exists")
+
     # Set random seed
     np.random.seed(args.seed)
 
@@ -208,6 +210,7 @@ def main(args: Args) -> None:
         args.num_trials_per_robot,
     )
 
+    # TODO: should just distribute all tasks across robots
     # global_results: list[dict] = []
 
     for task_id in range(num_tasks_in_suite):

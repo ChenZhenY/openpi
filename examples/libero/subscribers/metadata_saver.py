@@ -39,10 +39,15 @@ class MetadataSaver(_subscriber.Subscriber):
             self._action_chunk_broker.current_action_chunk.chunk_index
         )
 
+    # TODO: "folder/robot_idx/<index>_<task_suite_name>_<task_id>_<success>/metadata.json"
     @override
     def on_episode_end(self) -> None:
-        logging.info(f"Saving metadata to {self._out_dir / 'action_chunks.json'}")
-        with open(self._out_dir / "action_chunks.json", "w") as f:
+        existing = list(self._out_dir.glob("metadata_[0-9]*.json"))
+        next_idx = max([int(p.stem.split("_")[1]) for p in existing], default=-1) + 1
+        out_path = self._out_dir / f"metadata_{next_idx}.json"
+
+        logging.info(f"Saving metadata to {out_path}")
+        with open(self._out_dir / "metadata.json", "w") as f:
             metadata = {
                 "timestamps": self._timestamps,
                 "action_chunk_indices": self._action_chunk_indices,
@@ -51,4 +56,4 @@ class MetadataSaver(_subscriber.Subscriber):
                 ],
                 "success": self._environment.current_success,
             }
-            json.dump(metadata, f)
+            json.dump(metadata, f, indent=4)
