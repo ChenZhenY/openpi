@@ -102,6 +102,7 @@ class LiberoSimEnvironment(_environment.Environment):
                 )
             ),
             "prompt": str(self._task_description),
+            "step": self._step_counter,
         }
 
     def apply_action(self, action: dict) -> None:

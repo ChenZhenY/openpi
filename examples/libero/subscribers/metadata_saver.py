@@ -8,7 +8,14 @@ from openpi_client.runtime import subscriber as _subscriber
 from typing_extensions import override
 from openpi_client import action_chunk_broker
 from examples.libero.env import LiberoSimEnvironment
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
+
+
+@dataclass
+class Timestamp:
+    timestamp: float
+    action_chunk_index: int
+    action_chunk_current_step: int
 
 
 class MetadataSaver(_subscriber.Subscriber):
@@ -31,8 +38,7 @@ class MetadataSaver(_subscriber.Subscriber):
         self._robot_idx = robot_idx
         self._environment = environment
         self._action_chunk_broker = action_chunk_broker
-        self._timestamps: List[float] = []
-        self._action_chunk_indices: List[int] = []
+        self._timestamps: List[Timestamp] = []
 
     @override
     def on_episode_start(self) -> None:
@@ -41,9 +47,12 @@ class MetadataSaver(_subscriber.Subscriber):
 
     @override
     def on_step(self, observation: dict, action: dict) -> None:
-        self._timestamps.append(time.time())
-        self._action_chunk_indices.append(
-            self._action_chunk_broker.current_action_chunk.chunk_index
+        self._timestamps.append(
+            Timestamp(
+                timestamp=time.time(),
+                action_chunk_index=action["action_chunk_index"],
+                action_chunk_current_step=action["action_chunk_current_step"],
+            )
         )
 
     # TODO: "folder/robot_idx/<index>_<task_suite_name>_<task_id>_<success>/metadata.json"
@@ -59,8 +68,7 @@ class MetadataSaver(_subscriber.Subscriber):
                 "task_suite_name": self._task_suite_name,
                 "task_id": self._task_id,
                 "robot_idx": self._robot_idx,
-                "timestamps": self._timestamps,
-                "action_chunk_indices": self._action_chunk_indices,
+                "timestamps": [asdict(t) for t in self._timestamps],
                 "action_chunks": [
                     asdict(ac) for ac in self._action_chunk_broker.action_chunks
                 ],
