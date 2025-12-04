@@ -18,7 +18,6 @@ from dataclasses import dataclass, asdict, field
 from examples.libero import utils
 from examples.libero.env import LiberoSimEnvironment
 from examples.libero.subscribers.metadata_saver import MetadataSaver
-from examples.libero.subscribers.video_saver import VideoSaver
 
 LIBERO_ENV_RESOLUTION = 256  # resolution used to render training data
 
@@ -50,7 +49,7 @@ class Args:
     # Multi-robot / threading parameters
     #################################################################################################################
     num_robots: int = 9  # Number of always-running sims (robots)
-    control_hz: float = 20.0  # Target control frequency for each sim
+    control_hz: int = 20  # Target control frequency for each sim #NOTE: int because this is the fps of the video
 
     #################################################################################################################
     # ActionChunkBroker / RTC parameters
@@ -124,11 +123,6 @@ def create_runtime(args: Args, robot_idx: int, job: Job) -> _runtime.Runtime:
                 task_suite_name=job.task_suite_name,
                 task_id=job.task_id,
                 robot_idx=robot_idx,
-            ),
-            VideoSaver(
-                out_dir=pathlib.Path(args.output_dir)
-                / str(robot_idx)
-                / (args.task_suite_name + "_" + str(job.task_id)),
             ),
             # ProgressSubscriber() # TODO
         ],

@@ -2,6 +2,8 @@ import logging
 import pathlib
 import time
 import json
+import imageio
+import numpy as np
 
 from typing import List
 from openpi_client.runtime import subscriber as _subscriber
@@ -18,6 +20,7 @@ class Timestamp:
     action_chunk_current_step: int
 
 
+# TODO: rename
 class MetadataSaver(_subscriber.Subscriber):
     """Saves episode data."""
 
@@ -39,11 +42,14 @@ class MetadataSaver(_subscriber.Subscriber):
         self._environment = environment
         self._action_chunk_broker = action_chunk_broker
         self._timestamps: List[Timestamp] = []
+        self._images: List[np.ndarray] = []
+        self._control_hz = environment.control_hz
 
     @override
     def on_episode_start(self) -> None:
         self._timestamps = []
         self._action_chunk_indices = []
+        self._images = []
 
     @override
     def on_step(self, observation: dict, action: dict) -> None:
@@ -54,6 +60,7 @@ class MetadataSaver(_subscriber.Subscriber):
                 action_chunk_current_step=action["action_chunk_current_step"],
             )
         )
+        self._images.append(observation["observation/image"])
 
     # TODO: "folder/robot_idx/<index>_<task_suite_name>_<task_id>_<success>/metadata.json"
     @override
@@ -75,3 +82,10 @@ class MetadataSaver(_subscriber.Subscriber):
                 "success": self._environment.current_success,
             }
             json.dump(metadata, f, indent=4)
+
+        logging.info(f"Saving video to {self._out_dir / 'out.mp4'}")
+        imageio.mimwrite(
+            self._out_dir / "out.mp4",
+            [np.asarray(x) for x in self._images],
+            fps=self._control_hz,  # NOTE: saving in control hz fps for now
+        )

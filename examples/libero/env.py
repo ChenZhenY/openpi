@@ -160,6 +160,10 @@ class LiberoSimEnvironment(_environment.Environment):
     def current_success(self) -> bool:
         return self._current_success
 
+    @property
+    def control_hz(self) -> float:
+        return self._control_hz
+
     @override
     def close(self) -> None:
         self._env.close()
