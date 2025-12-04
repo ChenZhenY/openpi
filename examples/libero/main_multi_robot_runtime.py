@@ -21,7 +21,7 @@ from examples.libero import utils
 from examples.libero import logging_config
 from examples.libero.env import LiberoSimEnvironment
 from examples.libero.progress_manager import ProgressManager
-from examples.libero.subscribers.metadata_saver import MetadataSaver
+from examples.libero.subscribers.saver import Saver
 from examples.libero.subscribers.progress_subscriber import ProgressSubscriber
 
 
@@ -135,10 +135,8 @@ def create_runtime(args: Args, job: Job) -> _runtime.Runtime:
         environment=env,
         agent=agent,
         subscribers=[
-            MetadataSaver(
-                out_dir=pathlib.Path(args.output_dir)
-                / str(robot_idx)
-                / (args.task_suite_name + "_" + str(job.task_id)),
+            Saver(
+                out_dir=pathlib.Path(args.output_dir),
                 environment=env,
                 action_chunk_broker=broker,
                 task_suite_name=job.task_suite_name,
@@ -160,8 +158,9 @@ def create_runtime(args: Args, job: Job) -> _runtime.Runtime:
     return runtime
 
 
-def _robot_worker(args: Args, job: Job) -> None:
+def _robot_worker(task_args) -> None:
     """Worker process that handles jobs for a specific robot index."""
+    args, job = task_args
     runtime = create_runtime(args, job)
     runtime.run()
     runtime.close()
@@ -186,7 +185,17 @@ def run_robots(args: Args, jobs: list[Job]) -> None:
             initializer=init_worker,
             initargs=(args, counter, progress_manager.queue),
         ) as pool:
-            pool.starmap(_robot_worker, [(args, job) for job in jobs])
+            try:
+                # use imap_unordered so that it exits immediately on any exception
+                _ = list(
+                    pool.imap_unordered(_robot_worker, [(args, job) for job in jobs])
+                )
+            except Exception as e:
+                logging.error(f"Error in robot worker: {e}")
+                raise e
+            finally:
+                pool.close()
+                pool.join()
 
 
 @dataclass
@@ -239,7 +248,7 @@ def create_jobs(args: Args) -> list[Job]:
     return jobs
 
 
-# TODO: refactor in metadata dataclass and put with metadata_saver
+# TODO: refactor in metadata dataclass and put with saver
 @dataclass
 class Result:
     success: bool

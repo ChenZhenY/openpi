@@ -12,7 +12,7 @@ import math
 
 import subprocess
 
-from examples.libero.subscribers.metadata_saver import Timestamp
+from examples.libero.subscribers.saver import Timestamp
 from typing import Dict, List
 
 LIBERO_ENV_RESOLUTION = 256  # resolution used to render training data
