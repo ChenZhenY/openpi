@@ -5,6 +5,7 @@ import json
 import logging
 import pathlib
 import multiprocessing
+import shutil
 
 import numpy as np
 from libero.libero import benchmark
@@ -66,6 +67,7 @@ class Args:
     overwrite: bool = False
 
 
+# TODO: make explicit
 def _latency_for_robot(args: Args, robot_idx: int) -> float:
     """Return the latency (in ms) to use for a given robot index."""
     if not args.latency_ms:
@@ -76,27 +78,12 @@ def _latency_for_robot(args: Args, robot_idx: int) -> float:
     return float(args.latency_ms[-1])
 
 
-def create_runtime(args: Args, robot_idx: int, job: Job) -> _runtime.Runtime:
-    # Create LIBERO env for this robot
-    # TODO: cache this if slow
+def init_worker(args: Args, counter) -> None:
+    global robot_idx, ws_client, broker, agent
+    with counter.get_lock():
+        robot_idx = counter.value
+        counter.value += 1
 
-    env_raw, task_description = utils._get_libero_env(
-        job.task,
-        LIBERO_ENV_RESOLUTION,
-        seed=args.seed + robot_idx,
-    )
-    env = LiberoSimEnvironment(
-        env=env_raw,
-        task_description=task_description,
-        initial_states=job.initial_state,
-        resize_size=args.resize_size,
-        num_steps_wait=args.num_steps_wait,
-        max_episode_steps=args.max_steps,
-        latency_ms=_latency_for_robot(args, robot_idx),
-        control_hz=args.control_hz,
-    )
-
-    # Create policy agent for this robot (with optional per-robot latency)
     ws_client = _websocket_client_policy.WebsocketClientPolicy(
         args.host,
         args.port,
@@ -109,6 +96,24 @@ def create_runtime(args: Args, robot_idx: int, job: Job) -> _runtime.Runtime:
         d=args.d,
     )
     agent = _policy_agent.PolicyAgent(policy=broker)
+
+
+def create_runtime(args: Args, job: Job) -> _runtime.Runtime:
+    env_raw, task_description = utils._get_libero_env(
+        job.task,
+        LIBERO_ENV_RESOLUTION,
+        seed=args.seed + robot_idx,
+    )
+    env = LiberoSimEnvironment(
+        env=env_raw,
+        task_description=task_description,
+        initial_states=job.initial_states,
+        resize_size=args.resize_size,
+        num_steps_wait=args.num_steps_wait,
+        max_episode_steps=args.max_steps,
+        latency_ms=_latency_for_robot(args, robot_idx),
+        control_hz=args.control_hz,
+    )
 
     runtime = _runtime.Runtime(
         environment=env,
@@ -127,48 +132,38 @@ def create_runtime(args: Args, robot_idx: int, job: Job) -> _runtime.Runtime:
             # ProgressSubscriber() # TODO
         ],
         max_hz=args.control_hz,
-        num_episodes=1,
+        num_episodes=len(job.initial_states),
         max_episode_steps=env._max_episode_steps,  # type: ignore[attr-defined]
     )
     return runtime
 
 
-def _robot_worker(args: Args, robot_idx: int, jobs: list[Job]) -> None:
+def _robot_worker(args: Args, job: Job) -> None:
     """Worker process that handles jobs for a specific robot index."""
-    for job in jobs:
-        runtime = create_runtime(args, robot_idx, job)
-        runtime.run()
-        runtime.close()
+    runtime = create_runtime(args, job)
+    runtime.run()
+    runtime.close()
 
 
 def run_robots(args: Args, jobs: list[Job]) -> None:
+    counter = multiprocessing.Value("i", 0)  # for assigning robot indices
+
     # TODO: rich multiprocessing progress
-    # Distribute jobs across robots (round-robin)
-    jobs_per_robot: list[list[Job]] = [[] for _ in range(args.num_robots)]
-    for idx, job in enumerate(jobs):
-        jobs_per_robot[idx % args.num_robots].append(job)
-
-    # Create one process per robot, each with its index (0 to num_robots-1)
-    processes = []
-    for robot_idx in range(args.num_robots):
-        p = multiprocessing.Process(
-            target=_robot_worker,
-            args=(args, robot_idx, jobs_per_robot[robot_idx]),
-        )
-        p.start()
-        processes.append(p)
-
-    # Wait for all processes to complete
-    for p in processes:
-        p.join()
+    with multiprocessing.Pool(
+        processes=args.num_robots, initializer=init_worker, initargs=(args, counter)
+    ) as pool:
+        pool.starmap(_robot_worker, [(args, job) for job in jobs])
 
 
 @dataclass
 class Job:
-    task: benchmark.Task
+    """A job is a task with a batch of episodes."""
+
     task_suite_name: str
+
+    task: benchmark.Task
     task_id: int
-    initial_state: np.ndarray
+    initial_states: np.ndarray  # batch, state_dim
 
 
 def create_jobs(args: Args) -> list[Job]:
@@ -196,17 +191,14 @@ def create_jobs(args: Args) -> list[Job]:
             )
             continue
 
-        for i in range(args.num_trials_per_robot):
-            initial_state = all_initial_states[
-                None, i
-            ]  # FIXME: LiberoSimEnvironment expects a batch of initial states, clean up these semantics
-            job = Job(
-                task=task,
-                task_suite_name=args.task_suite_name,
-                task_id=task_id,
-                initial_state=initial_state,
-            )
-            jobs.append(job)
+        initial_states = all_initial_states[: args.num_trials_per_robot]
+        job = Job(
+            task=task,
+            task_suite_name=args.task_suite_name,
+            task_id=task_id,
+            initial_states=initial_states,
+        )
+        jobs.append(job)
 
     logging.info("Created %d jobs", len(jobs))
 
@@ -257,6 +249,9 @@ def aggregate_results(output_path: pathlib.Path) -> None:
 def main(args: Args) -> None:
     if not args.overwrite and pathlib.Path(args.output_dir).exists():
         raise ValueError(f"Output path {args.output_dir} already exists")
+    if args.overwrite:
+        shutil.rmtree(args.output_dir)
+        pathlib.Path(args.output_dir).mkdir(parents=True, exist_ok=True)
 
     np.random.seed(args.seed)
 
