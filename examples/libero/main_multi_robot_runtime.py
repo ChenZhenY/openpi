@@ -15,6 +15,8 @@ from openpi_client.runtime import runtime as _runtime
 from openpi_client.runtime.agents import policy_agent as _policy_agent
 import tyro
 from dataclasses import dataclass, asdict, field
+from rich.console import Console
+from rich.table import Table
 
 from examples.libero import utils
 from examples.libero import logging_config
@@ -71,15 +73,11 @@ class Args:
     show_progress: bool = True
 
 
-# TODO: make explicit
 def _latency_for_robot(args: Args, robot_idx: int) -> float:
     """Return the latency (in ms) to use for a given robot index."""
     if not args.latency_ms:
         return 0.0
-    if robot_idx < len(args.latency_ms):
-        return float(args.latency_ms[robot_idx])
-    # If fewer latencies than robots, repeat the last value
-    return float(args.latency_ms[-1])
+    return float(args.latency_ms[robot_idx])
 
 
 def init_worker(args: Args, counter, progress_queue) -> None:
@@ -262,9 +260,23 @@ def aggregate_results(output_path: pathlib.Path) -> None:
         }
     )
     summary.reset_index().to_csv(output_path / "summary.csv", index=False)
-    # TODO: rich
-    print(summary)
-    print("Total success rate: ", summary["success"].mean())
+
+    # Display results using rich
+    console = Console()
+    table = Table(title="Task Success Summary")
+    table.add_column("Task Suite", style="cyan")
+    table.add_column("Task ID", style="magenta")
+    table.add_column("Success Rate", style="green")
+
+    for _, row in summary.reset_index().iterrows():
+        table.add_row(
+            str(row["task_suite_name"]), str(row["task_id"]), f"{row['success']:.2%}"
+        )
+
+    console.print(table)
+    console.print(
+        f"\n[bold green]Total success rate: {summary['success'].mean():.2%}[/bold green]"
+    )
 
 
 def main(args: Args) -> None:
@@ -273,6 +285,13 @@ def main(args: Args) -> None:
     if args.overwrite:
         shutil.rmtree(args.output_dir)
         pathlib.Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+
+    # Validate latency specification
+    if args.latency_ms and len(args.latency_ms) != args.num_robots:
+        raise ValueError(
+            f"latency_ms must either be empty or have exactly {args.num_robots} values "
+            f"(one per robot), but got {len(args.latency_ms)} values"
+        )
 
     np.random.seed(args.seed)
 
