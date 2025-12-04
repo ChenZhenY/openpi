@@ -124,28 +124,6 @@ class LiberoSimEnvironment(_environment.Environment):
         if done:
             self._current_success = True
 
-        # Compute additional steps to simulate latency (repeat same action)
-        if not done and self._latency_ms > 0.0 and self._control_hz > 0.0:
-            extra_steps = int(round((self._latency_ms / 1000.0) * self._control_hz))
-            for _ in range(extra_steps):
-                if self._step_counter >= self._max_episode_steps or done:
-                    break
-                obs, _, done, info = self._env.step(act.tolist())
-                self._last_obs = obs
-                self._step_counter += 1
-
-                # Record a frame for each extra latency step so pauses show up in video
-                img = np.ascontiguousarray(obs["agentview_image"][::-1, ::-1])
-                img = image_tools.convert_to_uint8(
-                    image_tools.resize_with_pad(
-                        img, self._resize_size, self._resize_size
-                    )
-                )
-                self._current_frames.append(img)
-
-                if done:
-                    self._current_success = True
-
         if done or self._step_counter >= self._max_episode_steps:
             self._done = True
             self._episode_results.append(self._current_success)
