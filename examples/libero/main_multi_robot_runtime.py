@@ -18,7 +18,9 @@ from dataclasses import dataclass, asdict, field
 
 from examples.libero import utils
 from examples.libero.env import LiberoSimEnvironment
+from examples.libero.progress_manager import ProgressManager
 from examples.libero.subscribers.metadata_saver import MetadataSaver
+from examples.libero.subscribers.progress_subscriber import ProgressSubscriber
 
 LIBERO_ENV_RESOLUTION = 256  # resolution used to render training data
 
@@ -78,11 +80,14 @@ def _latency_for_robot(args: Args, robot_idx: int) -> float:
     return float(args.latency_ms[-1])
 
 
-def init_worker(args: Args, counter) -> None:
-    global robot_idx, ws_client, broker, agent
+def init_worker(args: Args, counter, progress_queue) -> None:
+    global robot_idx, ws_client, broker, agent, _progress_queue
     with counter.get_lock():
         robot_idx = counter.value
         counter.value += 1
+
+    # Store queue globally for access in create_runtime
+    _progress_queue = progress_queue
 
     ws_client = _websocket_client_policy.WebsocketClientPolicy(
         args.host,
@@ -115,6 +120,13 @@ def create_runtime(args: Args, job: Job) -> _runtime.Runtime:
         control_hz=args.control_hz,
     )
 
+    # Create job info for progress subscriber
+    job_info = {
+        "task_suite_name": job.task_suite_name,
+        "task_id": job.task_id,
+        "num_episodes": len(job.initial_states),
+    }
+
     runtime = _runtime.Runtime(
         environment=env,
         agent=agent,
@@ -129,7 +141,13 @@ def create_runtime(args: Args, job: Job) -> _runtime.Runtime:
                 task_id=job.task_id,
                 robot_idx=robot_idx,
             ),
-            # ProgressSubscriber() # TODO
+            ProgressSubscriber(
+                queue=_progress_queue,
+                robot_idx=robot_idx,
+                job_info=job_info,
+                environment=env,
+                update_frequency=10,
+            ),
         ],
         max_hz=args.control_hz,
         num_episodes=len(job.initial_states),
@@ -148,11 +166,19 @@ def _robot_worker(args: Args, job: Job) -> None:
 def run_robots(args: Args, jobs: list[Job]) -> None:
     counter = multiprocessing.Value("i", 0)  # for assigning robot indices
 
-    # TODO: rich multiprocessing progress
-    with multiprocessing.Pool(
-        processes=args.num_robots, initializer=init_worker, initargs=(args, counter)
-    ) as pool:
-        pool.starmap(_robot_worker, [(args, job) for job in jobs])
+    # Use ProgressManager context manager
+    with ProgressManager(
+        num_robots=args.num_robots,
+        total_jobs=len(jobs),
+        max_steps=args.max_steps,
+    ) as progress_manager:
+        # Pass queue to worker initializer
+        with multiprocessing.Pool(
+            processes=args.num_robots,
+            initializer=init_worker,
+            initargs=(args, counter, progress_manager.queue),
+        ) as pool:
+            pool.starmap(_robot_worker, [(args, job) for job in jobs])
 
 
 @dataclass
