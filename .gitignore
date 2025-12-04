@@ -180,3 +180,4 @@ secrets/
 logs/
 log/
 benchmarks/
+*.lprof
