@@ -21,6 +21,7 @@ import tqdm
 import tyro
 
 from examples.libero import utils
+from examples.libero import logging_config
 
 LIBERO_DUMMY_ACTION = [0.0] * 6 + [-1.0]
 LIBERO_ENV_RESOLUTION = 256  # resolution used to render training data
@@ -166,9 +167,9 @@ def eval_libero(
                 # Query model to get action
                 _worker_status_dict[pid] = f"ep{episode_idx}: t={t} waiting for server"
                 action_chunk = client.infer(element)["actions"]
-                assert (
-                    len(action_chunk) >= args.replan_steps
-                ), f"We want to replan every {args.replan_steps} steps, but policy only predicts {len(action_chunk)} steps."
+                assert len(action_chunk) >= args.replan_steps, (
+                    f"We want to replan every {args.replan_steps} steps, but policy only predicts {len(action_chunk)} steps."
+                )
                 predicted_action_chunks.append(action_chunk)
                 action_plan.extend(action_chunk[: args.replan_steps])
 
@@ -347,5 +348,5 @@ def main(args: Args) -> None:
 
 if __name__ == "__main__":
     multiprocessing.set_start_method("spawn")
-    logging.basicConfig(level=logging.INFO)
+    logging_config.setup_logging()
     tyro.cli(main)

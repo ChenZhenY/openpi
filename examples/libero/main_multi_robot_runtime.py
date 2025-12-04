@@ -6,6 +6,7 @@ import logging
 import pathlib
 import multiprocessing
 import shutil
+from contextlib import nullcontext
 
 import numpy as np
 from libero.libero import benchmark
@@ -17,10 +18,12 @@ import tyro
 from dataclasses import dataclass, asdict, field
 
 from examples.libero import utils
+from examples.libero import logging_config
 from examples.libero.env import LiberoSimEnvironment
 from examples.libero.progress_manager import ProgressManager
 from examples.libero.subscribers.metadata_saver import MetadataSaver
 from examples.libero.subscribers.progress_subscriber import ProgressSubscriber
+
 
 LIBERO_ENV_RESOLUTION = 256  # resolution used to render training data
 
@@ -67,6 +70,7 @@ class Args:
     seed: int = 7  # Random Seed (for reproducibility)
     output_dir: str = "data/libero/multi_robot_videos"
     overwrite: bool = False
+    show_progress: bool = True
 
 
 # TODO: make explicit
@@ -146,7 +150,7 @@ def create_runtime(args: Args, job: Job) -> _runtime.Runtime:
                 robot_idx=robot_idx,
                 job_info=job_info,
                 environment=env,
-                update_frequency=10,
+                update_frequency=1,
             ),
         ],
         max_hz=args.control_hz,
@@ -167,10 +171,14 @@ def run_robots(args: Args, jobs: list[Job]) -> None:
     counter = multiprocessing.Value("i", 0)  # for assigning robot indices
 
     # Use ProgressManager context manager
-    with ProgressManager(
-        num_robots=args.num_robots,
-        total_jobs=len(jobs),
-        max_steps=args.max_steps,
+    with (
+        ProgressManager(
+            num_robots=args.num_robots,
+            total_jobs=len(jobs),
+            max_steps=args.max_steps,
+        )
+        if args.show_progress
+        else nullcontext()
     ) as progress_manager:
         # Pass queue to worker initializer
         with multiprocessing.Pool(
@@ -288,5 +296,5 @@ def main(args: Args) -> None:
 
 if __name__ == "__main__":
     multiprocessing.set_start_method("spawn")  # allows multiple processes with envs
-    logging.basicConfig(level=logging.INFO, force=True)
+    logging_config.setup_logging()
     main(tyro.cli(Args))

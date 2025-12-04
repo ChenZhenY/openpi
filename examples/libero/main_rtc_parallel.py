@@ -23,6 +23,7 @@ import tqdm
 import tyro
 
 from examples.libero import utils
+from examples.libero import logging_config
 
 LIBERO_DUMMY_ACTION = [0.0] * 6 + [-1.0]
 LIBERO_ENV_RESOLUTION = 256  # resolution used to render training data
@@ -560,5 +561,5 @@ def main(args: Args) -> None:
 
 if __name__ == "__main__":
     multiprocessing.set_start_method("spawn")
-    logging.basicConfig(level=logging.INFO)
+    logging_config.setup_logging()
     tyro.cli(main)

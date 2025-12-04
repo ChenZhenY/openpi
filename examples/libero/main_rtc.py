@@ -15,6 +15,7 @@ import tyro
 import time
 
 from examples.libero import utils
+from examples.libero import logging_config
 
 LIBERO_DUMMY_ACTION = [0.0] * 6 + [-1.0]
 LIBERO_ENV_RESOLUTION = 256  # resolution used to render training data
@@ -364,5 +365,5 @@ def eval_libero(args: Args) -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    logging_config.setup_logging()
     tyro.cli(eval_libero)

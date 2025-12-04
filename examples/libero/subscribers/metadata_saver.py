@@ -12,6 +12,8 @@ from openpi_client import action_chunk_broker
 from examples.libero.env import LiberoSimEnvironment
 from dataclasses import asdict, dataclass
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class Timestamp:
@@ -62,14 +64,14 @@ class MetadataSaver(_subscriber.Subscriber):
         )
         self._images.append(observation["observation/image"])
 
-    # TODO: "folder/robot_idx/<index>_<task_suite_name>_<task_id>_<success>/metadata.json"
+    # TODO: "folder/robot_idx/<index>_<task_suite_name>_<task_id>_<episode_idx>_<success>/metadata.json"
     @override
     def on_episode_end(self) -> None:
         existing = list(self._out_dir.glob("metadata_[0-9]*.json"))
         next_idx = max([int(p.stem.split("_")[1]) for p in existing], default=-1) + 1
         out_path = self._out_dir / f"metadata_{next_idx}.json"
 
-        logging.info(f"Saving metadata to {out_path}")
+        logger.info(f"Saving metadata to {out_path}")
         with open(self._out_dir / "metadata.json", "w") as f:
             metadata = {
                 "task_suite_name": self._task_suite_name,
@@ -83,7 +85,7 @@ class MetadataSaver(_subscriber.Subscriber):
             }
             json.dump(metadata, f, indent=4)
 
-        logging.info(f"Saving video to {self._out_dir / 'out.mp4'}")
+        logger.info(f"Saving video to {self._out_dir / 'out.mp4'}")
         imageio.mimwrite(
             self._out_dir / "out.mp4",
             [np.asarray(x) for x in self._images],

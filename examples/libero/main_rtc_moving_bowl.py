@@ -40,6 +40,7 @@ import tyro
 
 # LIBERO imports
 from libero.libero.envs import OffScreenRenderEnv
+from examples.libero import logging_config
 
 LIBERO_DUMMY_ACTION = [0.0] * 6 + [-1.0]
 LIBERO_ENV_RESOLUTION = 256
@@ -798,5 +799,5 @@ def main(args: Args) -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    logging_config.setup_logging()
     tyro.cli(main)
