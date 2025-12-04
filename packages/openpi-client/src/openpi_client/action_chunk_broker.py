@@ -7,19 +7,7 @@ import tree
 from typing_extensions import override
 
 from openpi_client import base_policy as _base_policy
-from openpi_client.csv_dataclass import CSVDataclass
-from dataclasses import dataclass, field
-
-
-@dataclass
-class ActionChunk(CSVDataclass):
-    chunk_length: int
-    request_timestamp: float
-    response_timestamp: float
-    start_step: int = field(default_factory=lambda: -1)
-
-    def set_start_step(self, start_step: int) -> None:
-        self.start_step = start_step
+from examples.libero.schemas import ActionChunk
 
 
 class ActionChunkBroker(_base_policy.BasePolicy):
@@ -107,6 +95,8 @@ class ActionChunkBroker(_base_policy.BasePolicy):
                 self._action_chunks[-1].set_start_step(env_step - self._cur_step)
 
             results = tree.map_structure(lambda x: x[self._cur_step, ...], self._last_results)
+            results["action_chunk_index"] = len(self._action_chunks) - 1
+            results["action_chunk_current_step"] = self._cur_step
             self._obs = obs
             self._cur_step += 1
 
@@ -120,8 +110,6 @@ class ActionChunkBroker(_base_policy.BasePolicy):
                 self._cur_step -= self._s
                 self._action_chunks[-1].set_start_step(env_step - self._cur_step)  # TODO: double-check
 
-            results["action_chunk_index"] = len(self._action_chunks) - 1
-            results["action_chunk_current_step"] = self._cur_step
             return results
 
         else:
@@ -143,13 +131,13 @@ class ActionChunkBroker(_base_policy.BasePolicy):
             self._last_results = {"actions": self._last_results["actions"]}
 
             results = tree.map_structure(lambda x: x[self._cur_step, ...], self._last_results)
+            results["action_chunk_index"] = len(self._action_chunks) - 1
+            results["action_chunk_current_step"] = self._cur_step
             self._cur_step += 1
 
             if self._cur_step >= self._action_horizon:
                 self._last_results = None
 
-            results["action_chunk_index"] = len(self._action_chunks) - 1
-            results["action_chunk_current_step"] = self._cur_step
             return results
 
     @override

@@ -1,26 +1,26 @@
 import logging
 import pathlib
 import time
-import json
 import imageio
 import numpy as np
 
 from typing import List
+from dataclasses import dataclass
 from openpi_client.runtime import subscriber as _subscriber
 from typing_extensions import override
 from openpi_client import action_chunk_broker
-from openpi_client.csv_dataclass import CSVDataclass
+from examples.libero.schemas import Timestamp, JSONDataclass, ActionChunk
 from examples.libero.env import LiberoSimEnvironment
-from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class Timestamp(CSVDataclass):
-    timestamp: float
-    action_chunk_index: int
-    action_chunk_current_step: int
+class Result(JSONDataclass):
+    success: bool
+    robot_idx: int
+    task_suite_name: str
+    task_id: int
 
 
 class Saver(_subscriber.Subscriber):
@@ -92,14 +92,13 @@ class Saver(_subscriber.Subscriber):
 
     def _save_metadata(self, out_folder: pathlib.Path) -> None:
         logger.info(f"Saving metadata to {out_folder / 'metadata.json'}")
-        with open(out_folder / "metadata.json", "w") as f:
-            metadata = {
-                "task_suite_name": self._task_suite_name,
-                "task_id": self._task_id,
-                "robot_idx": self._robot_idx,
-                "success": self._environment.current_success,
-            }
-            json.dump(metadata, f, indent=4)
+        result = Result(
+            success=self._environment.current_success,
+            robot_idx=self._robot_idx,
+            task_suite_name=self._task_suite_name,
+            task_id=self._task_id,
+        )
+        result.to_json(out_folder / "metadata.json")
 
     def _save_timestamps(self, out_folder: pathlib.Path) -> None:
         logger.info(f"Saving timestamps to {out_folder / 'timestamps.csv'}")
@@ -107,7 +106,7 @@ class Saver(_subscriber.Subscriber):
 
     def _save_action_chunks(self, out_folder: pathlib.Path) -> None:
         logger.info(f"Saving action chunks to {out_folder / 'action_chunks.csv'}")
-        action_chunk_broker.ActionChunk.to_csv(
+        ActionChunk.to_csv(
             self._action_chunk_broker.action_chunks, out_folder / "action_chunks.csv"
         )
 

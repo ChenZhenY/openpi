@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pandas as pd
-import json
 import logging
 import pathlib
 import multiprocessing
@@ -21,9 +20,8 @@ from examples.libero import utils
 from examples.libero import logging_config
 from examples.libero.env import LiberoSimEnvironment
 from examples.libero.progress_manager import ProgressManager
-from examples.libero.subscribers.saver import Saver
+from examples.libero.subscribers.saver import Saver, Result
 from examples.libero.subscribers.progress_subscriber import ProgressSubscriber
-
 
 LIBERO_ENV_RESOLUTION = 256  # resolution used to render training data
 
@@ -248,32 +246,12 @@ def create_jobs(args: Args) -> list[Job]:
     return jobs
 
 
-# TODO: refactor in metadata dataclass and put with saver
-@dataclass
-class Result:
-    success: bool
-    robot_idx: int
-    task_suite_name: str
-    task_id: int
-
-    @classmethod
-    def from_metadata_file(cls, metadata_file: pathlib.Path) -> Result:
-        with open(metadata_file, "r") as f:
-            metadata = json.load(f)
-            return cls(
-                success=metadata["success"],
-                robot_idx=metadata["robot_idx"],
-                task_suite_name=metadata["task_suite_name"],
-                task_id=metadata["task_id"],
-            )
-
-
 def aggregate_results(output_path: pathlib.Path) -> None:
     metadata_files = list(output_path.glob("**/metadata.json"))
 
     results: list[Result] = []
     for metadata_file in metadata_files:
-        result = Result.from_metadata_file(metadata_file)
+        result = Result.from_json(metadata_file)
         results.append(result)
 
     results_df = pd.DataFrame([asdict(result) for result in results])
