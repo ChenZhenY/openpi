@@ -7,14 +7,19 @@ import tree
 from typing_extensions import override
 
 from openpi_client import base_policy as _base_policy
-from dataclasses import dataclass
+from openpi_client.csv_dataclass import CSVDataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
-class ActionChunk:
-    chunk_index: int
+class ActionChunk(CSVDataclass):
+    chunk_length: int
     request_timestamp: float
     response_timestamp: float
+    start_step: int = field(default_factory=lambda: -1)
+
+    def set_start_step(self, start_step: int) -> None:
+        self.start_step = start_step
 
 
 class ActionChunkBroker(_base_policy.BasePolicy):
@@ -68,7 +73,7 @@ class ActionChunkBroker(_base_policy.BasePolicy):
                 response_timestamp = time.time()
                 self._action_chunks.append(
                     ActionChunk(
-                        chunk_index=len(self._action_chunks),
+                        chunk_length=len(self._last_results["actions"]),
                         request_timestamp=request_timestamp,
                         response_timestamp=response_timestamp,
                     )
@@ -79,6 +84,7 @@ class ActionChunkBroker(_base_policy.BasePolicy):
 
     @override
     def infer(self, obs: Dict) -> Dict:  # noqa: UP006
+        env_step = obs["step"]
         if self._is_rtc:
             # init
             if self._last_results is None:
@@ -88,7 +94,7 @@ class ActionChunkBroker(_base_policy.BasePolicy):
                 response_timestamp = time.time()
                 self._action_chunks.append(
                     ActionChunk(
-                        chunk_index=len(self._action_chunks),
+                        chunk_length=len(self._last_results["actions"]),
                         request_timestamp=request_timestamp,
                         response_timestamp=response_timestamp,
                     )
@@ -98,6 +104,7 @@ class ActionChunkBroker(_base_policy.BasePolicy):
                 self._last_state = self._last_results["state"]
                 self._last_results = {"actions": self._last_results["actions"]}
                 self._cur_step = 0
+                self._action_chunks[-1].set_start_step(env_step - self._cur_step)
 
             results = tree.map_structure(lambda x: x[self._cur_step, ...], self._last_results)
             self._obs = obs
@@ -111,7 +118,10 @@ class ActionChunkBroker(_base_policy.BasePolicy):
                 self._last_state = self._background_results["state"]
                 self._last_results = {"actions": self._background_results["actions"]}
                 self._cur_step -= self._s
+                self._action_chunks[-1].set_start_step(env_step - self._cur_step)  # TODO: double-check
 
+            results["action_chunk_index"] = len(self._action_chunks) - 1
+            results["action_chunk_current_step"] = self._cur_step
             return results
 
         else:
@@ -122,12 +132,13 @@ class ActionChunkBroker(_base_policy.BasePolicy):
                 response_timestamp = time.time()
                 self._action_chunks.append(
                     ActionChunk(
-                        chunk_index=len(self._action_chunks),
+                        chunk_length=len(self._last_results["actions"]),
                         request_timestamp=request_timestamp,
                         response_timestamp=response_timestamp,
                     )
                 )
                 self._cur_step = 0
+                self._action_chunks[-1].set_start_step(env_step - self._cur_step)
 
             self._last_results = {"actions": self._last_results["actions"]}
 
@@ -137,6 +148,8 @@ class ActionChunkBroker(_base_policy.BasePolicy):
             if self._cur_step >= self._action_horizon:
                 self._last_results = None
 
+            results["action_chunk_index"] = len(self._action_chunks) - 1
+            results["action_chunk_current_step"] = self._cur_step
             return results
 
     @override
@@ -158,6 +171,9 @@ class ActionChunkBroker(_base_policy.BasePolicy):
 
     @property
     def action_chunks(self) -> List[ActionChunk]:
+        assert all(chunk.start_step >= 0 for chunk in self._action_chunks), (
+            "An action chunk did not have a start step set"
+        )
         return self._action_chunks
 
     @property

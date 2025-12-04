@@ -1,4 +1,3 @@
-import csv
 import logging
 import pathlib
 import time
@@ -10,48 +9,18 @@ from typing import List
 from openpi_client.runtime import subscriber as _subscriber
 from typing_extensions import override
 from openpi_client import action_chunk_broker
+from openpi_client.csv_dataclass import CSVDataclass
 from examples.libero.env import LiberoSimEnvironment
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class Timestamp:
+class Timestamp(CSVDataclass):
     timestamp: float
     action_chunk_index: int
     action_chunk_current_step: int
-
-    @classmethod
-    def to_csv(cls, timestamps: List["Timestamp"], filepath: pathlib.Path) -> None:
-        """Save a list of Timestamps to a CSV file."""
-        with open(filepath, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=[field.name for field in fields(cls)])
-            writer.writeheader()
-            for ts in timestamps:
-                writer.writerow(
-                    {
-                        "timestamp": ts.timestamp,
-                        "action_chunk_index": ts.action_chunk_index,
-                        "action_chunk_current_step": ts.action_chunk_current_step,
-                    }
-                )
-
-    @classmethod
-    def from_csv(cls, filepath: pathlib.Path) -> List["Timestamp"]:
-        """Load a list of Timestamps from a CSV file."""
-        timestamps = []
-        with open(filepath, "r") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                timestamps.append(
-                    cls(
-                        timestamp=float(row["timestamp"]),
-                        action_chunk_index=int(row["action_chunk_index"]),
-                        action_chunk_current_step=int(row["action_chunk_current_step"]),
-                    )
-                )
-        return timestamps
 
 
 class Saver(_subscriber.Subscriber):
