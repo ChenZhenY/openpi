@@ -1153,8 +1153,9 @@ _CONFIGS = [
         # Each dataset uses its own prompt handling if prompt_from_task is True.
         model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
         data=MultiDatasetLiberoDataConfig(
-            # repo_ids=["pi_libero_lerobot", "lerobot_interpolation_50steps_1112"],
-            repo_ids=["pi_libero_lerobot", "lerobot_interpolation_50steps_inter10_1122"],
+            repo_ids=["pi_libero_lerobot", "lerobot_interpolation_30steps_check_1206"],
+            # repo_ids=["pi_libero_lerobot", "lerobot_interpolation_30steps_1112"],
+            # repo_ids=["pi_libero_lerobot", "lerobot_interpolation_50steps_inter10_1122"],
             # repo_ids=["pi_libero_lerobot", "lerobot_all_task_pairs_step_30_1107_lang"],  # Example: cotrain on multiple datasets
             # Optional: adjust sampling ratio. [2.0, 1.0] means dataset 0 is sampled twice as often as dataset 1.
             # If None, uniform sampling is used.
@@ -1168,7 +1169,7 @@ _CONFIGS = [
             ),
         ),
         batch_size=256,
-        num_train_steps=30_000,
+        num_train_steps=2010,
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_libero/params"),
         save_interval=2000,
         keep_period=2000,
@@ -1216,7 +1217,7 @@ _CONFIGS = [
         ema_decay=0.999,
     ),
     
-TrainConfig(
+    TrainConfig(
         name="pi05_libero_cotraining_interpolation_1122",
         # Example config demonstrating cotraining on multiple Libero datasets.
         # All datasets share the same transforms and normalization stats (from asset_id).
@@ -1224,7 +1225,7 @@ TrainConfig(
         model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
         data=MultiDatasetLiberoDataConfig(
             # repo_ids=["pi_libero_lerobot", "lerobot_interpolation_50steps_1122"], 
-            repo_ids=["pi_libero_lerobot", "lerobot_interpolation_50steps_inter5_1122"],
+            repo_ids=["pi_libero_lerobot", "lerobot_interpolation_50steps_first30_1125"],
             # repo_ids=["pi_libero_lerobot", "lerobot_all_task_pairs_step_30_1107_lang"],  # Example: cotrain on multiple datasets
             # Optional: adjust sampling ratio. [2.0, 1.0] means dataset 0 is sampled twice as often as dataset 1.
             # If None, uniform sampling is used.
@@ -1238,10 +1239,10 @@ TrainConfig(
             ),
         ),
         batch_size=256,
-        num_train_steps=500,
+        num_train_steps=6001,
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_libero/params"),
-        save_interval=500,
-        keep_period=500,
+        save_interval=1000,
+        keep_period=2000,
         lr_schedule=_optimizer.CosineDecaySchedule(
             warmup_steps=10_000,
             peak_lr=5e-5,
