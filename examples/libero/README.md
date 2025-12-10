@@ -39,6 +39,15 @@ export CLIENT_ARGS="--args.task-suite-name libero_10"
 Terminal window 1:
 
 ```bash
+salloc -G l40s:1 -c 4 -p rl2-lab --time=4:00:00
+
+# Run the server
+uv run scripts/serve_policy.py --env LIBERO
+```
+
+Terminal window 2:
+
+```bash
 # Create virtual environment
 uv venv --python 3.8 examples/libero/.venv
 source examples/libero/.venv/bin/activate
@@ -47,19 +56,19 @@ uv pip install -e packages/openpi-client
 uv pip install -e third_party/libero
 export PYTHONPATH=$PYTHONPATH:$PWD/third_party/libero
 
+# Allocate a GPU and 1 + # of robots CPUs
+salloc -G a40:1 -c 6 -p overcap --time=4:00:00
+source scripts/libero_client.sh
+
 # Run the simulation
-python examples/libero/main.py
-
-# To run with glx for Mujoco instead (use this if you have egl errors):
-MUJOCO_GL=glx python examples/libero/main.py
+python examples/libero/main_multi_robot_runtime.py \
+    --host <host_name> \
+    --num_robots 5 \
+    --num_trials_per_robot 10 \
+    --overwrite \
+    --control_hz 20
 ```
 
-Terminal window 2:
-
-```bash
-# Run the server
-uv run scripts/serve_policy.py --env LIBERO
-```
 
 ## Results
 
