@@ -172,7 +172,9 @@ class AsyncWebsocketClientPolicy:
     async def _get_connection(self) -> Any:
         """Get a connection from the pool."""
         async with self._pool_lock:
-            assert self._connection_pool, "No connections left in pool. Either allocate more connections or reduce the number of concurrent requests."
+            assert self._connection_pool, (
+                "No connections left in pool. Either allocate more connections or reduce the number of concurrent requests."
+            )
             return self._connection_pool.pop()
 
     async def _return_connection(self, conn: Any) -> None:

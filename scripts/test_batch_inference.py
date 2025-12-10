@@ -66,9 +66,9 @@ def test_libero_inputs_batch():
         224,
         3,
     ), f"Expected base image shape (2, 224, 224, 3), got {result['image']['base_0_rgb'].shape}"
-    assert result["image_mask"]["base_0_rgb"].shape == (
-        2,
-    ), f"Expected mask shape (2,), got {result['image_mask']['base_0_rgb'].shape}"
+    assert result["image_mask"]["base_0_rgb"].shape == (2,), (
+        f"Expected mask shape (2,), got {result['image_mask']['base_0_rgb'].shape}"
+    )
 
     print("✓ LiberoInputs batch test passed!")
 
@@ -130,12 +130,12 @@ def test_single_vs_batch_consistency():
 
     # Verify consistency
     assert np.allclose(single_result["state"], batch_result["state"][0]), "State mismatch"
-    assert np.allclose(
-        single_result["image"]["base_0_rgb"], batch_result["image"]["base_0_rgb"][0]
-    ), "Base image mismatch"
-    assert np.allclose(
-        single_result["image"]["left_wrist_0_rgb"], batch_result["image"]["left_wrist_0_rgb"][0]
-    ), "Wrist image mismatch"
+    assert np.allclose(single_result["image"]["base_0_rgb"], batch_result["image"]["base_0_rgb"][0]), (
+        "Base image mismatch"
+    )
+    assert np.allclose(single_result["image"]["left_wrist_0_rgb"], batch_result["image"]["left_wrist_0_rgb"][0]), (
+        "Wrist image mismatch"
+    )
 
     print("✓ Single vs batch consistency test passed!")
 
