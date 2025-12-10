@@ -60,82 +60,69 @@ def get_video_size(path):
     return stream["width"], stream["height"]
 
 
-def annotate_video(
-    clip: VideoFileClip, result: Result, border_duration: float = 0.5
-) -> VideoFileClip:
-    """
-    Annotate video with setup information and success/failure border.
-
-    Args:
-        clip: Video clip to annotate
-        result: Metadata about the episode
-        border_duration: Duration of the colored border at the end (in seconds)
-
-    Returns:
-        Annotated video clip
-    """
+def create_text_overlay(clip: VideoFileClip, text: str) -> ImageClip:
+    """Create a text overlay banner for a video clip."""
     w, h = clip.size
 
-    # Create text overlay with setup information using PIL
-    text = (
-        f"Robot {result.robot_idx} | {result.task_suite_name} | Task {result.task_id}"
-    )
-
-    # Create a PIL image for the text
+    # Create semi-transparent black banner
     img = Image.new("RGBA", (w, 30), color=(0, 0, 0, 180))
     draw = ImageDraw.Draw(img)
 
-    # Try to use a default font, fall back to default if unavailable
+    # Load font
     try:
         font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 14)
     except Exception:
         font = ImageFont.load_default()
 
+    # Draw text
     draw.text((5, 5), text, font=font, fill=(255, 255, 255, 255))
 
-    # Convert PIL image to numpy array and create ImageClip
-    txt_array = np.array(img)
-    txt_clip = (
-        ImageClip(txt_array).set_duration(clip.duration).set_position(("left", "top"))
+    # Convert to ImageClip
+    return (
+        ImageClip(np.array(img))
+        .set_duration(clip.duration)
+        .set_position(("left", "top"))
     )
 
-    # Create colored border for success/failure indicator at the end
-    border_color = (0, 255, 0) if result.success else (255, 0, 0)  # Green or Red
-    border_thickness = 5
 
-    # Create border clips (top, bottom, left, right)
-    border_start = max(0, clip.duration - border_duration)
-    top_border = (
-        ColorClip(size=(w, border_thickness), color=border_color)
+def create_success_border(
+    clip: VideoFileClip, success: bool, duration: float = 0.5
+) -> List[ColorClip]:
+    """Create colored border clips indicating success/failure."""
+    w, h = clip.size
+    color = (0, 255, 0) if success else (255, 0, 0)
+    thickness = 5
+    start = max(0, clip.duration - duration)
+
+    return [
+        ColorClip(size=(w, thickness), color=color)
         .set_position(("center", "top"))
-        .set_start(border_start)
-        .set_duration(border_duration)
-    )
-    bottom_border = (
-        ColorClip(size=(w, border_thickness), color=border_color)
+        .set_start(start)
+        .set_duration(duration),
+        ColorClip(size=(w, thickness), color=color)
         .set_position(("center", "bottom"))
-        .set_start(border_start)
-        .set_duration(border_duration)
-    )
-    left_border = (
-        ColorClip(size=(border_thickness, h), color=border_color)
+        .set_start(start)
+        .set_duration(duration),
+        ColorClip(size=(thickness, h), color=color)
         .set_position(("left", "center"))
-        .set_start(border_start)
-        .set_duration(border_duration)
-    )
-    right_border = (
-        ColorClip(size=(border_thickness, h), color=border_color)
+        .set_start(start)
+        .set_duration(duration),
+        ColorClip(size=(thickness, h), color=color)
         .set_position(("right", "center"))
-        .set_start(border_start)
-        .set_duration(border_duration)
-    )
+        .set_start(start)
+        .set_duration(duration),
+    ]
 
-    # Composite the video with text and borders
-    annotated = CompositeVideoClip(
-        [clip, txt_clip, top_border, bottom_border, left_border, right_border]
-    )
 
-    return annotated
+def annotate_video(clip: VideoFileClip, result: Result) -> VideoFileClip:
+    """Annotate video with setup information and success/failure indicator."""
+    text = (
+        f"Robot {result.robot_idx} | {result.task_suite_name} | Task {result.task_id}"
+    )
+    text_overlay = create_text_overlay(clip, text)
+    border_clips = create_success_border(clip, result.success)
+
+    return CompositeVideoClip([clip, text_overlay] + border_clips)
 
 
 def grid_videos(videos, output, cols, rows, duration):
