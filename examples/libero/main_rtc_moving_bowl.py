@@ -496,9 +496,9 @@ def eval_moving_bowl(
                 if not action_plan:
                     # Need to replan - query model for new action chunk
                     action_chunk = policy_client.infer(obs_dict)["actions"]
-                    assert (
-                        len(action_chunk) >= args.replan_steps
-                    ), f"We want to replan every {args.replan_steps} steps, but policy only predicts {len(action_chunk)} steps."
+                    assert len(action_chunk) >= args.replan_steps, (
+                        f"We want to replan every {args.replan_steps} steps, but policy only predicts {len(action_chunk)} steps."
+                    )
                     action_plan.extend(action_chunk[: args.replan_steps])
 
                 # Pop next action from plan
