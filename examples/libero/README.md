@@ -64,9 +64,13 @@ source scripts/libero_client.sh
 python examples/libero/main_multi_robot_runtime.py \
     --host <host_name> \
     --num_robots 5 \
-    --num_trials_per_robot 10 \
+    --num-trials-per-robot 10 \
     --overwrite \
-    --control_hz 20
+    --control-hz 20 \
+    --output-dir data/libero/multi_robot_videos
+
+python examples/libero/combine_videos.py \
+    --output-dir data/libero/multi_robot_videos
 ```
 
 
