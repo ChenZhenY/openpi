@@ -23,7 +23,7 @@ class SyncBroker(_base_policy.BasePolicy):
 
         self._lock = threading.Lock()
         self._condition = threading.Condition(self._lock)
-        self._infer_thread = threading.Thread(target=self._background_infer)
+        self._infer_thread = threading.Thread(target=self._background_infer, daemon=True)
         self._infer_thread.start()
 
     def _background_infer(self):
