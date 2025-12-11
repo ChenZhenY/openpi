@@ -418,3 +418,29 @@ class ProgressManager:
             self.console.print(f"Total Successes: {self.job_stats.total_successes}")
             self.console.print(f"Overall Success Rate: {success_rate:.2f}%")
             self.console.print(f"Total Time: {total_time:.2f}s")
+
+
+class DebugQueue:
+    """Mock queue that prints messages immediately for debug mode."""
+
+    def put_nowait(self, message: dict):
+        msg_type = message["type"]
+        if msg_type == "worker_init":
+            print(
+                f"[Robot {message['robot_idx']}] Starting task {message['job_info']['task_id']}"
+            )
+        elif msg_type == "episode_start":
+            print(
+                f"[Robot {message['robot_idx']}] Episode {message['episode_idx']} started"
+            )
+        elif msg_type == "episode_end":
+            status = "SUCCESS" if message["success"] else "FAILURE"
+            print(
+                f"[Robot {message['robot_idx']}] Episode {message['episode_idx']} ended: {status}"
+            )
+        elif msg_type == "step_batch":
+            print(f"[Robot {message['robot_idx']}] Step {message['step_count']}")
+        elif msg_type == "worker_complete":
+            print(
+                f"[Robot {message['robot_idx']}] Completed: {message['total_successes']}/{message['total_episodes']} successes"
+            )

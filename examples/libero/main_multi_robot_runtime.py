@@ -25,7 +25,7 @@ from rich.table import Table
 from examples.libero import utils
 from examples.libero import logging_config
 from examples.libero.env import LiberoSimEnvironment
-from examples.libero.progress_manager import ProgressManager
+from examples.libero.progress_manager import ProgressManager, DebugQueue
 from examples.libero.subscribers.saver import Saver, Result
 from examples.libero.subscribers.progress_subscriber import ProgressSubscriber
 
@@ -36,7 +36,7 @@ LIBERO_ENV_RESOLUTION = 256  # resolution used to render training data
 class ActionChunkBrokerArgs:
     """Arguments for action chunk broker configuration."""
 
-    type: ActionChunkBrokerType = ActionChunkBrokerType.SYNC
+    broker_type: ActionChunkBrokerType = ActionChunkBrokerType.SYNC
     # RTC-specific params
     s_min: int = 5
     d_init: int = 4
@@ -81,10 +81,11 @@ class Args:
     output_dir: str = "data/libero/multi_robot_videos"
     overwrite: bool = False
     show_progress: bool = True
+    debug: bool = False  # Run in single process with immediate progress output
 
     def create_broker_config(self, policy) -> SyncBrokerConfig | RTCBrokerConfig:
         """Helper to create the appropriate broker config from args."""
-        if self.action_chunk_broker.type == ActionChunkBrokerType.RTC:
+        if self.action_chunk_broker.broker_type == ActionChunkBrokerType.RTC:
             return RTCBrokerConfig(
                 policy=policy,
                 action_horizon=self.action_horizon,
@@ -121,7 +122,7 @@ def init_worker(args: Args, counter, progress_queue) -> None:
 
     # Create broker config and instantiate
     config = args.create_broker_config(ws_client)
-    broker = args.action_chunk_broker.type.create(config)
+    broker = args.action_chunk_broker.broker_type.create(config)
     agent = _policy_agent.PolicyAgent(policy=broker)
 
 
@@ -185,6 +186,18 @@ def _robot_worker(task_args) -> None:
 
 
 def run_robots(args: Args, jobs: list[Job]) -> None:
+    if args.debug:
+        # Debug mode: run sequentially in main process
+        counter = multiprocessing.Value("i", 0)
+        debug_queue = DebugQueue()
+
+        for job in jobs:
+            init_worker(args, counter, debug_queue)
+            runtime = create_runtime(args, job)
+            runtime.run()
+            runtime.close()
+        return
+
     counter = multiprocessing.Value("i", 0)  # for assigning robot indices
 
     # Use ProgressManager context manager
@@ -214,13 +227,6 @@ def run_robots(args: Args, jobs: list[Job]) -> None:
             finally:
                 pool.close()
                 pool.join()
-
-    # NOTE: hack for debugging until I set up a cleaner way, just uncomment this and comment out above
-    # for job in jobs:
-    #     init_worker(args, counter, None)
-    #     runtime = create_runtime(args, job)
-    #     runtime.run()
-    #     runtime.close()
 
 
 @dataclass
