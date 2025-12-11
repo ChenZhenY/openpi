@@ -65,7 +65,6 @@ class LiberoSimEnvironment(_environment.Environment):
         self._last_obs = obs
         self._done = False
         self._step_counter = 0
-        self._current_frames = []
         self._current_success = False
         self._episode_idx += 1
 
@@ -87,9 +86,6 @@ class LiberoSimEnvironment(_environment.Environment):
         wrist_img = image_tools.convert_to_uint8(
             image_tools.resize_with_pad(wrist_img, self._resize_size, self._resize_size)
         )
-
-        # Record frame for video (use the main agentview image)
-        self._current_frames.append(img)
 
         return {
             "observation/image": img,
@@ -127,7 +123,6 @@ class LiberoSimEnvironment(_environment.Environment):
         if done or self._step_counter >= self._max_episode_steps:
             self._done = True
             self._episode_results.append(self._current_success)
-            self._current_frames = []
 
     @property
     def episode_results(self) -> List[bool]:
