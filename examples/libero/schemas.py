@@ -4,8 +4,12 @@ import pathlib
 from dataclasses import dataclass, field, fields, asdict
 from typing import List, Type, TypeVar
 
+import numpy as np
+import pandas as pd
+
 T = TypeVar("T", bound="CSVDataclass")
 J = TypeVar("J", bound="JSONDataclass")
+P = TypeVar("P", bound="ParquetDataclass")
 
 
 class CSVDataclass:
@@ -66,9 +70,65 @@ class JSONDataclass:
             return cls(**data)
 
 
+class ParquetDataclass:
+    """Mixin class that adds Parquet serialization to dataclasses."""
+
+    @classmethod
+    def to_parquet(cls: Type[P], instances: List[P], filepath: pathlib.Path) -> None:
+        """Save a list of dataclass instances to a Parquet file."""
+        if not instances:
+            return
+
+        # Convert instances to dictionary format
+        data_dict = {field.name: [] for field in fields(cls)}
+
+        for instance in instances:
+            for f in fields(cls):
+                value = getattr(instance, f.name)
+                data_dict[f.name].append(value)
+
+        # Convert lists of numpy arrays to a format Parquet can handle
+        for f in fields(cls):
+            values = data_dict[f.name]
+            if values and isinstance(values[0], np.ndarray):
+                # Convert to list of lists for nested array storage
+                data_dict[f.name] = [
+                    v.tolist() if isinstance(v, np.ndarray) else v for v in values
+                ]
+
+        # Create DataFrame and write to Parquet
+        df = pd.DataFrame(data_dict)
+        df.to_parquet(filepath, engine="pyarrow", index=False)
+
+    @classmethod
+    def from_parquet(cls: Type[P], filepath: pathlib.Path) -> List[P]:
+        """Load a list of dataclass instances from a Parquet file."""
+        df = pd.read_parquet(filepath, engine="pyarrow")
+
+        instances = []
+        for _, row in df.iterrows():
+            kwargs = {}
+            for f in fields(cls):
+                value = row[f.name]
+
+                # Convert back to numpy arrays if needed
+                # This is a heuristic - you might want to add field annotations
+                # to specify which fields should be numpy arrays
+                if isinstance(value, list) and value and isinstance(value[0], list):
+                    kwargs[f.name] = np.array(value)
+                elif pd.isna(value):
+                    kwargs[f.name] = None
+                else:
+                    kwargs[f.name] = value
+
+            instances.append(cls(**kwargs))
+
+        return instances
+
+
 @dataclass
-class ActionChunk(CSVDataclass):
-    chunk_length: int
+class ActionChunk(ParquetDataclass):
+    actions: List[List[float]]
     request_timestamp: float
     response_timestamp: float
     start_step: int = field(default_factory=lambda: -1)
@@ -79,6 +139,13 @@ class ActionChunk(CSVDataclass):
     @property
     def latency(self) -> float:
         return self.response_timestamp - self.request_timestamp
+
+    @property
+    def chunk_length(self) -> int:
+        return len(self.actions)
+
+    def get_action(self, index: int) -> List[float]:
+        return self.actions[index]
 
 
 @dataclass

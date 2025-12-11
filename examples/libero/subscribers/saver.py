@@ -106,7 +106,7 @@ class Saver(_subscriber.Subscriber):
 
     def _save_action_chunks(self, out_folder: pathlib.Path) -> None:
         logger.info(f"Saving action chunks to {out_folder / 'action_chunks.csv'}")
-        ActionChunk.to_csv(
+        ActionChunk.to_parquet(
             self._action_chunk_broker.action_chunks, out_folder / "action_chunks.csv"
         )
 
