@@ -76,6 +76,10 @@ class ActionChunk(CSVDataclass):
     def set_start_step(self, start_step: int) -> None:
         self.start_step = start_step
 
+    @property
+    def latency(self) -> float:
+        return self.response_timestamp - self.request_timestamp
+
 
 @dataclass
 class Timestamp(CSVDataclass):
