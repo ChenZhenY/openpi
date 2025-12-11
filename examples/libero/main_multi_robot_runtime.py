@@ -9,10 +9,14 @@ from contextlib import nullcontext
 
 import numpy as np
 from libero.libero import benchmark
-from openpi_client import action_chunk_broker
 from openpi_client import websocket_client_policy as _websocket_client_policy
 from openpi_client.runtime import runtime as _runtime
 from openpi_client.runtime.agents import policy_agent as _policy_agent
+from openpi_client.action_chunkers import (
+    ActionChunkBrokerType,
+    SyncBrokerConfig,
+    RTCBrokerConfig,
+)
 import tyro
 from dataclasses import dataclass, asdict, field
 from rich.console import Console
@@ -29,6 +33,16 @@ LIBERO_ENV_RESOLUTION = 256  # resolution used to render training data
 
 
 @dataclass
+class ActionChunkBrokerArgs:
+    """Arguments for action chunk broker configuration."""
+
+    type: ActionChunkBrokerType = ActionChunkBrokerType.SYNC
+    # RTC-specific params
+    s_min: int = 5
+    d_init: int = 4
+
+
+@dataclass
 class Args:
     #################################################################################################################
     # Model server parameters
@@ -38,6 +52,9 @@ class Args:
     resize_size: int = 224
     action_horizon: int = (
         10  # Action horizon for ActionChunkBroker (matches Libero model config)
+    )
+    action_chunk_broker: ActionChunkBrokerArgs = field(
+        default_factory=ActionChunkBrokerArgs
     )
     latency_ms: list[float] = field(
         default_factory=list
@@ -58,19 +75,27 @@ class Args:
     control_hz: int = 20  # Target control frequency for each sim #NOTE: int because this is the fps of the video
 
     #################################################################################################################
-    # ActionChunkBroker / RTC parameters
-    #################################################################################################################
-    use_rtc: bool = False
-    s: int = 5
-    d: int = 4
-
-    #################################################################################################################
     # Utils
     #################################################################################################################
     seed: int = 7  # Random Seed (for reproducibility)
     output_dir: str = "data/libero/multi_robot_videos"
     overwrite: bool = False
     show_progress: bool = True
+
+    def create_broker_config(self, policy) -> SyncBrokerConfig | RTCBrokerConfig:
+        """Helper to create the appropriate broker config from args."""
+        if self.action_chunk_broker.type == ActionChunkBrokerType.RTC:
+            return RTCBrokerConfig(
+                policy=policy,
+                action_horizon=self.action_horizon,
+                s_min=self.action_chunk_broker.s_min,
+                d_init=self.action_chunk_broker.d_init,
+            )
+        else:  # SYNC
+            return SyncBrokerConfig(
+                policy=policy,
+                action_horizon=self.action_horizon,
+            )
 
 
 def _latency_for_robot(args: Args, robot_idx: int) -> float:
@@ -93,13 +118,10 @@ def init_worker(args: Args, counter, progress_queue) -> None:
         args.host,
         args.port,
     )
-    broker = action_chunk_broker.ActionChunkBroker(
-        policy=ws_client,
-        action_horizon=args.action_horizon,
-        is_rtc=args.use_rtc,
-        s=args.s,
-        d=args.d,
-    )
+
+    # Create broker config and instantiate
+    config = args.create_broker_config(ws_client)
+    broker = args.action_chunk_broker.type.create(config)
     agent = _policy_agent.PolicyAgent(policy=broker)
 
 
@@ -192,6 +214,13 @@ def run_robots(args: Args, jobs: list[Job]) -> None:
             finally:
                 pool.close()
                 pool.join()
+
+    # NOTE: hack for debugging until I set up a cleaner way, just uncomment this and comment out above
+    # for job in jobs:
+    #     init_worker(args, counter, None)
+    #     runtime = create_runtime(args, job)
+    #     runtime.run()
+    #     runtime.close()
 
 
 @dataclass

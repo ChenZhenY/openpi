@@ -8,7 +8,7 @@ from typing import List
 from dataclasses import dataclass
 from openpi_client.runtime import subscriber as _subscriber
 from typing_extensions import override
-from openpi_client import action_chunk_broker
+from openpi_client.action_chunkers.action_chunk_broker import ActionChunkBroker
 from examples.libero.schemas import Timestamp, JSONDataclass, ActionChunk
 from examples.libero.env import LiberoSimEnvironment
 
@@ -31,7 +31,7 @@ class Saver(_subscriber.Subscriber):
         self,
         out_dir: pathlib.Path,
         environment: LiberoSimEnvironment,
-        action_chunk_broker: action_chunk_broker.ActionChunkBroker,
+        action_chunk_broker: ActionChunkBroker,
         task_suite_name: str,
         task_id: int,
         robot_idx: int,
