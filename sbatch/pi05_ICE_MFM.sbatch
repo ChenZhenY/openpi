@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J pi05_liberogoal_interpolation_30steps_1206_gen         # Job name
+#SBATCH -J pi05_MFM_1209_2         # Job name
 #SBATCH -N 1 --ntasks-per-node=8        # Number of nodes and tasks per node
 #SBATCH --gres=gpu:H100:4               # Request 8xH100 GPUs
 #SBATCH --mem-per-cpu=128G                # Memory per core
@@ -30,19 +30,10 @@ export XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 # train with 95% of GPU memory
 #     --fsdp-devices=2 \
 #     --batch-size=128
 
-CONFIG_NAME=pi05_libero_cotraining_interpolation_1122
-EXP_NAME=pi05_liberogoal_interpolation_transporting_1210
-# REPO_IDS="${1:-pi_libero_lerobot lerobot_interpolation_50steps_1112}"
-
-# CONFIG_NAME=pi05_libero_cotraining_interpolation
-# EXP_NAME=pi05_liberogoal_interpolation_30steps_1206_new
-# REPO_IDS="${1:-pi_libero_lerobot lerobot_interpolation_50steps_1112}"
-
+CONFIG_NAME=pi05_mfm
+EXP_NAME=pi05_MFM_delta_1209_2
 FSDP_DEVICES=4
 BATCH_SIZE=256
-
-# FSDP_DEVICES=2
-# BATCH_SIZE=128
 
 uv run scripts/train.py \
     $CONFIG_NAME \
