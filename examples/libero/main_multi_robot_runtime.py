@@ -240,11 +240,13 @@ def create_jobs(args: Args) -> list[Job]:
     num_tasks_in_suite = task_suite.n_tasks
 
     logging.info(
-        "Setting up multi-robot LIBERO runtime over suite '%s' with %d tasks, num_robots=%d, trials_per_robot=%d",
+        "Setting up multi-robot LIBERO runtime over suite '%s' with %d tasks, num_robots=%d, trials_per_robot=%d, action_horizon=%d, control_hz=%d",
         args.task_suite_name,
         num_tasks_in_suite,
         args.num_robots,
         args.num_trials_per_robot,
+        args.action_horizon,
+        args.control_hz,
     )
 
     jobs: list[Job] = []
