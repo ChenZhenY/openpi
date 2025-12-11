@@ -1,0 +1,3 @@
+# Debugging/Development Notes
+
+- Ensure commas separate arguments in multi-line function calls (e.g., after nested calls like data=Config(...), add a trailing comma before the next arg).

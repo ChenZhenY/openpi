@@ -1,5 +1,5 @@
 import abc
-from typing import Dict
+from typing import Dict, List
 
 
 class BasePolicy(abc.ABC):
@@ -10,3 +10,7 @@ class BasePolicy(abc.ABC):
     def reset(self) -> None:
         """Reset the policy to its initial state."""
         pass
+
+    def infer_batch(self, obs_batch: List[Dict]) -> List[Dict]:
+        """Optional batch inference. Default falls back to per-item infer."""
+        return [self.infer(obs) for obs in obs_batch]
