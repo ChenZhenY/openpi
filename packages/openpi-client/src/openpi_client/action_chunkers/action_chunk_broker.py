@@ -1,10 +1,9 @@
 from typing import List
 from examples.libero.schemas import ActionChunk
 from abc import ABC
-from openpi_client import base_policy as _base_policy
 
 
-class ActionChunkBroker(_base_policy.BasePolicy, ABC):
+class ActionChunkBroker(ABC):
     """Wraps a policy to return action chunks one-at-a-time.
 
     Assumes that the first dimension of all action fields is the chunk size.
