@@ -1,23 +1,20 @@
-from typing import Dict
+import math
+from typing import Dict, List
 
 import threading
 import time
-import numpy as np
-import tree
 from typing_extensions import override
 
 from openpi_client import base_policy as _base_policy
 from examples.libero.schemas import ActionChunk
 from openpi_client.action_chunkers.action_chunk_broker import ActionChunkBroker
+from collections import deque
 
 
-class InferenceTimeRTCBroker(ActionChunkBroker):
-    """Wraps a policy to return action chunks one-at-a-time.
+class InferenceTimeRTCBroker(ActionChunkBroker, _base_policy.BasePolicy):
+    """Wraps a policy to return action chunks with inference time RTC support.
 
-    Assumes that the first dimension of all action fields is the chunk size.
-
-    A new inference call to the inner policy is only made when the current
-    list of chunks is exhausted.
+    The policy is called synchronously in the background thread whenever the current action chunk is exhausted.
     """
 
     def __init__(
@@ -26,97 +23,111 @@ class InferenceTimeRTCBroker(ActionChunkBroker):
         action_horizon: int,
         s_min: int = 5,
         d_init: int = 3,
-        is_rtc: bool = True,
+        delay_buffer_size: int = 10,
+        step_duration: float = 0.05,
     ):
-        ActionChunkBroker.__init__(self)
-        raise NotImplementedError("InferenceTimeRTCBroker is broken, needs to be fixed")
         self._policy = policy
-
         self._action_horizon = action_horizon
-        self._cur_step: int = 0
+        self._obs: Dict = {}
+        self._cur_step: int = -1
 
-        self._last_results: Dict[str, np.ndarray] | None = None
-        self._last_origin_actions: np.ndarray | None = None
-        self._background_results: Dict[str, np.ndarray] | None = None
-        self._background_running: bool = False
+        self._action_chunks: List[ActionChunk] = []
+        self._action_index: int = -1
 
-        self._obs: Dict[str, np.ndarray] | None = None
+        self._lock = threading.Lock()
+        self._condition = threading.Condition(self._lock)
+        self._infer_thread = threading.Thread(target=self._background_infer, daemon=True)
+        self._infer_thread.start()
+
         self._s_min = s_min
         self._d_init = d_init
-        self._is_rtc = is_rtc
+        self._delays: deque[int] = deque([self._d_init], maxlen=delay_buffer_size)
+        self._step_duration = step_duration
 
-        self._infer_thread = threading.Thread(target=self._background_infer)
-        self._infer_thread.start()
+    def _infer(
+        self, obs: Dict, infer_step: int, use_rtc: bool, steps_since_last_inference: int, estimated_delay: int
+    ) -> ActionChunk:
+        request_timestamp = time.time()
+        if use_rtc:
+            response = self._policy.infer(
+                obs, use_rtc=True, s_param=steps_since_last_inference, d_param=estimated_delay
+            )
+        else:
+            response = self._policy.infer(obs)
+        actions = response["actions"]
+        response_timestamp = time.time()
+
+        return ActionChunk(
+            actions=actions,
+            request_timestamp=request_timestamp,
+            response_timestamp=response_timestamp,
+            start_step=infer_step,
+        )
+
+    def _convert_latency_to_delay(self, latency: float) -> int:
+        """
+        Convert latency (in seconds) to delay (in steps).
+        """
+        return math.ceil(latency / self._step_duration)
 
     def _background_infer(self):
         while True:
-            if self._cur_step == self._s_min:
-                self._background_running = True
-                request_timestamp = time.time()
-                self._background_results = self._policy.infer(
-                    self._obs,
-                    self._last_origin_actions,
-                    self._is_rtc,
-                    s_param=self._s_min,
-                    d_param=self._d_init,
-                )
-                response_timestamp = time.time()
-                self._action_chunks.append(
-                    ActionChunk(
-                        chunk_length=len(self._last_results["actions"]),
-                        request_timestamp=request_timestamp,
-                        response_timestamp=response_timestamp,
-                    )
-                )
-                self._background_running = False
-            else:
-                time.sleep(0.01)
+            with self._condition:
+                self._condition.wait()
+
+                obs = self._obs
+                infer_step = self._cur_step
+                steps_since_last_inference = self._action_index
+                estimated_delay = max(self._delays)
+
+            action_chunk = self._infer(obs, infer_step, True, steps_since_last_inference, estimated_delay)
+
+            with self._condition:
+                self._action_chunks.append(action_chunk)
+                self._delays.append(self._convert_latency_to_delay(action_chunk.latency))
+                self._condition.notify()
+                self._action_index -= steps_since_last_inference
+
+    def _create_null_action(self) -> List[float]:
+        last_action = self.current_action_chunk.actions[-1].copy()
+        last_action[:-1] = 0.0
+        return last_action
 
     @override
     def infer(self, obs: Dict) -> Dict:  # noqa: UP006
-        env_step = obs["step"]
-        if self._last_results is None:
-            # TODO: refactor
-            request_timestamp = time.time()
-            self._last_results = self._policy.infer(obs, None, self._is_rtc, s_param=self._s_min, d_param=self._d_init)
-            response_timestamp = time.time()
-            self._action_chunks.append(
-                ActionChunk(
-                    chunk_length=len(self._last_results["actions"]),
-                    request_timestamp=request_timestamp,
-                    response_timestamp=response_timestamp,
-                )
-            )
-            assert isinstance(self._last_results, dict), "last_results must be a dict"
-            self._last_origin_actions = self._last_results["origin_actions"]
-            self._last_state = self._last_results["state"]
-            self._last_results = {"actions": self._last_results["actions"]}
-            self._cur_step = 0
-            self._action_chunks[-1].set_start_step(env_step - self._cur_step)
+        with self._condition:
+            self._obs = obs
+            self._cur_step = obs["step"]
+            self._action_index += 1
 
-        results = tree.map_structure(lambda x: x[self._cur_step, ...], self._last_results)
-        results["action_chunk_index"] = len(self._action_chunks) - 1
-        results["action_chunk_current_step"] = self._cur_step
-        self._obs = obs
-        self._cur_step += 1
+            # Assume no latency for step 0, so we wait until we have an action chunk
+            if len(self._action_chunks) == 0:
+                assert self._cur_step == 0, "First inference should be for step 0"
+                action_chunk = self._infer(obs, self._cur_step, False, 0, 0)
+                self._action_chunks.append(action_chunk)
 
-        # if current step equals s+d, wait for background inference to complete
-        if self._cur_step == self._s_min + self._d_init:
-            while self._background_running:
-                time.sleep(0.01)
-            self._last_origin_actions = self._background_results["origin_actions"]
-            self._last_state = self._background_results["state"]
-            self._last_results = {"actions": self._background_results["actions"]}
-            self._cur_step -= self._s_min
-            self._action_chunks[-1].set_start_step(env_step - self._cur_step)  # TODO: double-check
+            if self._action_index >= self._s_min:
+                self._condition.notify()
+
+            if self._action_index >= self.current_action_chunk.chunk_length:
+                action = self._create_null_action()
+                action_index = -1
+            else:
+                action = self.current_action_chunk.get_action(self._action_index)
+                action_index = self._action_index
+
+            results = {
+                "actions": action,
+                "action_chunk_index": len(self._action_chunks) - 1,
+                "action_chunk_current_step": action_index,
+            }
 
         return results
 
     @override
     def reset(self) -> None:
-        self._policy.reset()
-        self._action_chunks = []
-        self._last_results = None
-        self._last_origin_actions = None
-        self._background_results = None
-        self._cur_step = 0
+        with self._lock:
+            self._policy.reset()
+            self._action_chunks = []
+            self._cur_step = -1
+            self._action_index = -1
