@@ -21,6 +21,7 @@ class Result(JSONDataclass):
     robot_idx: int
     task_suite_name: str
     task_id: int
+    episode_idx: int
 
 
 class Saver(_subscriber.Subscriber):
@@ -59,7 +60,8 @@ class Saver(_subscriber.Subscriber):
             Timestamp(
                 timestamp=time.time(),
                 action_chunk_index=action["action_chunk_index"],
-                action_chunk_current_step=action["action_chunk_current_step"],
+                action_index=action["action_chunk_current_step"],
+                env_step=observation["step"],
             )
         )
         self._images.append(observation["observation/image"])
@@ -97,6 +99,7 @@ class Saver(_subscriber.Subscriber):
             robot_idx=self._robot_idx,
             task_suite_name=self._task_suite_name,
             task_id=self._task_id,
+            episode_idx=self._environment.episode_idx,
         )
         result.to_json(out_folder / "metadata.json")
 
@@ -106,8 +109,9 @@ class Saver(_subscriber.Subscriber):
 
     def _save_action_chunks(self, out_folder: pathlib.Path) -> None:
         logger.info(f"Saving action chunks to {out_folder / 'action_chunks.csv'}")
-        ActionChunk.to_parquet(
-            self._action_chunk_broker.action_chunks, out_folder / "action_chunks.csv"
+        ActionChunk.to_csv(
+            self._action_chunk_broker.action_chunks,
+            out_folder / "action_chunks.csv",
         )
 
     def _save_video(self, out_folder: pathlib.Path) -> None:

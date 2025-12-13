@@ -1,11 +1,10 @@
-from __future__ import annotations
-
 import pandas as pd
 import logging
 import pathlib
 import multiprocessing
 import shutil
 from contextlib import nullcontext
+from typing import Union, List
 
 import numpy as np
 from libero.libero import benchmark
@@ -25,11 +24,22 @@ from rich.table import Table
 from examples.libero import utils
 from examples.libero import logging_config
 from examples.libero.env import LiberoSimEnvironment
-from examples.libero.progress_manager import ProgressManager, DebugQueue
+from examples.libero.progress_manager import ProgressManager
 from examples.libero.subscribers.saver import Saver, Result
 from examples.libero.subscribers.progress_subscriber import ProgressSubscriber
 
 LIBERO_ENV_RESOLUTION = 256  # resolution used to render training data
+
+
+@dataclass
+class Job:
+    """A job is a task with a batch of episodes."""
+
+    task_suite_name: str
+
+    task: benchmark.Task
+    task_id: int
+    initial_states: np.ndarray  # batch, state_dim
 
 
 @dataclass
@@ -56,7 +66,7 @@ class Args:
     action_chunk_broker: ActionChunkBrokerArgs = field(
         default_factory=ActionChunkBrokerArgs
     )
-    latency_ms: list[float] = field(
+    latency_ms: List[float] = field(
         default_factory=list
     )  # Optional per-robot artificial latency (ms); length <= num_robots
 
@@ -83,7 +93,7 @@ class Args:
     show_progress: bool = True
     debug: bool = False  # Run in single process with immediate progress output
 
-    def create_broker_config(self, policy) -> SyncBrokerConfig | RTCBrokerConfig:
+    def create_broker_config(self, policy) -> Union[SyncBrokerConfig, RTCBrokerConfig]:
         """Helper to create the appropriate broker config from args."""
         if self.action_chunk_broker.broker_type == ActionChunkBrokerType.RTC:
             return RTCBrokerConfig(
@@ -185,19 +195,7 @@ def _robot_worker(task_args) -> None:
     runtime.close()
 
 
-def run_robots(args: Args, jobs: list[Job]) -> None:
-    if args.debug:
-        # Debug mode: run sequentially in main process
-        counter = multiprocessing.Value("i", 0)
-        debug_queue = DebugQueue()
-
-        for job in jobs:
-            init_worker(args, counter, debug_queue)
-            runtime = create_runtime(args, job)
-            runtime.run()
-            runtime.close()
-        return
-
+def run_robots(args: Args, jobs: List[Job]) -> None:
     counter = multiprocessing.Value("i", 0)  # for assigning robot indices
 
     # Use ProgressManager context manager
@@ -210,37 +208,33 @@ def run_robots(args: Args, jobs: list[Job]) -> None:
         if args.show_progress
         else nullcontext()
     ) as progress_manager:
-        # Pass queue to worker initializer
-        with multiprocessing.Pool(
-            processes=args.num_robots,
-            initializer=init_worker,
-            initargs=(args, counter, progress_manager.queue),
-        ) as pool:
-            try:
-                # use imap_unordered so that it exits immediately on any exception
-                _ = list(
-                    pool.imap_unordered(_robot_worker, [(args, job) for job in jobs])
-                )
-            except Exception as e:
-                logging.error(f"Error in robot worker: {e}")
-                raise e
-            finally:
-                pool.close()
-                pool.join()
+        if args.debug:
+            init_worker(args, counter, progress_manager.queue)
+            for job in jobs:
+                _robot_worker((args, job))
+        else:
+            # Pass queue to worker initializer
+            with multiprocessing.Pool(
+                processes=args.num_robots,
+                initializer=init_worker,
+                initargs=(args, counter, progress_manager.queue),
+            ) as pool:
+                try:
+                    # use imap_unordered so that it exits immediately on any exception
+                    _ = list(
+                        pool.imap_unordered(
+                            _robot_worker, [(args, job) for job in jobs]
+                        )
+                    )
+                except Exception as e:
+                    logging.error(f"Error in robot worker: {e}")
+                    raise e
+                finally:
+                    pool.close()
+                    pool.join()
 
 
-@dataclass
-class Job:
-    """A job is a task with a batch of episodes."""
-
-    task_suite_name: str
-
-    task: benchmark.Task
-    task_id: int
-    initial_states: np.ndarray  # batch, state_dim
-
-
-def create_jobs(args: Args) -> list[Job]:
+def create_jobs(args: Args) -> List[Job]:
     benchmark_dict = benchmark.get_benchmark_dict()
     task_suite = benchmark_dict[args.task_suite_name]()
     num_tasks_in_suite = task_suite.n_tasks
@@ -255,7 +249,7 @@ def create_jobs(args: Args) -> list[Job]:
         args.control_hz,
     )
 
-    jobs: list[Job] = []
+    jobs: List[Job] = []
     for task_id in range(num_tasks_in_suite):
         task = task_suite.get_task(task_id)
         all_initial_states = task_suite.get_task_init_states(task_id)
@@ -284,7 +278,7 @@ def create_jobs(args: Args) -> list[Job]:
 def aggregate_results(output_path: pathlib.Path) -> None:
     metadata_files = list(output_path.glob("**/metadata.json"))
 
-    results: list[Result] = []
+    results: List[Result] = []
     for metadata_file in metadata_files:
         result = Result.from_json(metadata_file)
         results.append(result)
@@ -320,7 +314,8 @@ def main(args: Args) -> None:
     if not args.overwrite and pathlib.Path(args.output_dir).exists():
         raise ValueError(f"Output path {args.output_dir} already exists")
     if args.overwrite:
-        shutil.rmtree(args.output_dir)
+        if pathlib.Path(args.output_dir).exists():
+            shutil.rmtree(args.output_dir)
         pathlib.Path(args.output_dir).mkdir(parents=True, exist_ok=True)
 
     # Validate latency specification

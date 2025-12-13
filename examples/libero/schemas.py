@@ -22,24 +22,31 @@ class CSVDataclass:
             return
 
         with open(filepath, "w", newline="") as f:
-            fieldnames = [field.name for field in fields(cls)]
+            allowed_fields = [
+                f for f in fields(cls) if f.type in (int, float, bool, str)
+            ]
+            fieldnames = [f.name for f in allowed_fields]
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for instance in instances:
                 writer.writerow(
-                    {field.name: getattr(instance, field.name) for field in fields(cls)}
+                    {
+                        field.name: getattr(instance, field.name)
+                        for field in allowed_fields
+                    }
                 )
 
     @classmethod
     def from_csv(cls: Type[T], filepath: pathlib.Path) -> List[T]:
         """Load a list of dataclass instances from a CSV file."""
         instances = []
+        allowed_fields = [f for f in fields(cls) if f.type in (int, float, bool, str)]
         with open(filepath, "r") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 # Convert string values to appropriate types based on field annotations
                 kwargs = {}
-                for field in fields(cls):
+                for field in allowed_fields:
                     value = row[field.name]
                     # Handle type conversion
                     if field.type in (int, "int"):
@@ -127,11 +134,11 @@ class ParquetDataclass:
 
 
 @dataclass
-class ActionChunk(ParquetDataclass):
-    actions: List[List[float]]
+class ActionChunk(ParquetDataclass, CSVDataclass):
     request_timestamp: float
     response_timestamp: float
     start_step: int = field(default_factory=lambda: -1)
+    actions: np.ndarray = field(default_factory=lambda: np.array([]))
 
     def set_start_step(self, start_step: int) -> None:
         self.start_step = start_step
@@ -151,5 +158,6 @@ class ActionChunk(ParquetDataclass):
 @dataclass
 class Timestamp(CSVDataclass):
     timestamp: float
+    env_step: int
     action_chunk_index: int
-    action_chunk_current_step: int
+    action_index: int

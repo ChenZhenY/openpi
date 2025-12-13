@@ -125,6 +125,10 @@ class LiberoSimEnvironment(_environment.Environment):
             self._episode_results.append(self._current_success)
 
     @property
+    def episode_idx(self) -> int:
+        return self._episode_idx
+
+    @property
     def episode_results(self) -> List[bool]:
         """Per-episode success flags accumulated so far."""
         return self._episode_results
