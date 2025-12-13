@@ -22,6 +22,7 @@ class SyncBroker(ActionChunkBroker, _base_policy.BasePolicy):
         self._cur_step: int = -1
 
         self._action_chunks: List[ActionChunk] = []
+        self._action_index: int = -1
 
         self._lock = threading.Lock()
         self._condition = threading.Condition(self._lock)
@@ -54,12 +55,19 @@ class SyncBroker(ActionChunkBroker, _base_policy.BasePolicy):
 
             with self._condition:
                 self._action_chunks.append(action_chunk)
+                self._action_index = -1
+
+    def _create_null_action(self) -> List[float]:
+        last_action = self.current_action_chunk.actions[-1].copy()
+        last_action[:-1] = 0.0
+        return last_action
 
     @override
     def infer(self, obs: Dict) -> Dict:  # noqa: UP006
         with self._condition:
             self._obs = obs
             self._cur_step = obs["step"]
+            self._action_index += 1
 
             # Assume no latency for step 0, so we wait until we have an action chunk
             if len(self._action_chunks) == 0:
@@ -67,18 +75,20 @@ class SyncBroker(ActionChunkBroker, _base_policy.BasePolicy):
                 action_chunk = self._infer(obs, self._cur_step)
                 self._action_chunks.append(action_chunk)
 
-            current_action_index = self._cur_step - self.current_action_chunk.start_step
-            if current_action_index == self.current_action_chunk.chunk_length:
+            if self._action_index == self.current_action_chunk.chunk_length:
                 self._condition.notify()
 
-            if current_action_index >= self.current_action_chunk.chunk_length:
-                # return the last action in the last action chunk if we have run out of actions
-                current_action_index = self.current_action_chunk.chunk_length - 1
+            if self._action_index >= self.current_action_chunk.chunk_length:
+                action = self._create_null_action()
+                action_index = -1
+            else:
+                action = self.current_action_chunk.get_action(self._action_index)
+                action_index = self._action_index
 
             results = {
-                "actions": self.current_action_chunk.get_action(current_action_index),
+                "actions": action,
                 "action_chunk_index": len(self._action_chunks) - 1,
-                "action_chunk_current_step": current_action_index,
+                "action_chunk_current_step": action_index,
             }
 
         return results
@@ -89,3 +99,4 @@ class SyncBroker(ActionChunkBroker, _base_policy.BasePolicy):
             self._policy.reset()
             self._action_chunks = []
             self._cur_step = -1
+            self._action_index = -1
