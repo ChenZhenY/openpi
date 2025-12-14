@@ -39,14 +39,12 @@ class RobotState:
     # Success tracking
     successes: int = 0
 
-    # Timing
-    start_time: float = 0.0
-    episode_start_time: float = 0.0
-    last_update_time: float = 0.0
-
     # Progress bar IDs (Rich TaskIDs)
     episode_bar_id: Optional[TaskID] = None
     step_bar_id: Optional[TaskID] = None
+
+    # Step tracking
+    steps_per_sec: float = 0.0
 
     # Status
     active: bool = True
@@ -213,7 +211,6 @@ class ProgressManager:
             )
 
             for robot_state in active_robots:
-                steps_per_sec = self._calculate_steps_per_sec(robot_state)
                 robot_success_rate = (
                     robot_state.successes / robot_state.current_episode * 100
                     if robot_state.current_episode > 0
@@ -224,7 +221,7 @@ class ProgressManager:
                     f"Ep {robot_state.current_episode}/{robot_state.total_episodes} "
                     f"Step {robot_state.current_step}/{robot_state.max_steps} | "
                     f"Success: {robot_state.successes}/{robot_state.current_episode} ({robot_success_rate:.0f}%) | "
-                    f"Speed: {steps_per_sec:.1f} steps/s\n"
+                    f"Speed: {robot_state.steps_per_sec:.1f} steps/s\n"
                 )
 
             layout.add_row(stats_text)
@@ -286,7 +283,6 @@ class ProgressManager:
             task_suite_name=job_info["task_suite_name"],
             total_episodes=job_info["num_episodes"],
             max_steps=self.max_steps,
-            start_time=message["timestamp"],
             active=True,
         )
 
@@ -313,7 +309,6 @@ class ProgressManager:
 
         if robot_idx in self.robot_states:
             robot_state = self.robot_states[robot_idx]
-            robot_state.episode_start_time = message["timestamp"]
             robot_state.current_step = 0
 
             # Reset step progress bar
@@ -335,7 +330,6 @@ class ProgressManager:
                 robot_state.successes += 1
                 self.job_stats.total_successes += 1
 
-            robot_state.last_update_time = message["timestamp"]
             self.job_stats.completed_episodes += 1
 
             # Update episode progress bar
@@ -352,7 +346,7 @@ class ProgressManager:
         if robot_idx in self.robot_states:
             robot_state = self.robot_states[robot_idx]
             robot_state.current_step = message["step_count"]
-            robot_state.last_update_time = message["timestamp"]
+            robot_state.steps_per_sec = message["steps/s"]
 
             # Update step progress bar
             if self.progress and robot_state.step_bar_id is not None:
@@ -384,17 +378,6 @@ class ProgressManager:
                     self.overall_bar_id,
                     completed=self.job_stats.completed_jobs,
                 )
-
-    def _calculate_steps_per_sec(self, robot_state: RobotState) -> float:
-        """Calculate steps per second for a robot."""
-        if robot_state.episode_start_time == 0:
-            return 0.0
-
-        elapsed = robot_state.last_update_time - robot_state.episode_start_time
-        if elapsed == 0:
-            return 0.0
-
-        return robot_state.current_step / elapsed
 
     def _print_final_summary(self):
         """Print final summary after completion."""
