@@ -177,7 +177,7 @@ def create_runtime(args: Args, job: Job) -> _runtime.Runtime:
                 robot_idx=robot_idx,
                 job_info=job_info,
                 environment=env,
-                update_frequency=1,
+                update_frequency=10,
             ),
         ],
         max_hz=args.control_hz,
