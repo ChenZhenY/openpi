@@ -270,6 +270,10 @@ def create_jobs(args: Args) -> List[Job]:
         )
         jobs.append(job)
 
+    n_repeats = (args.num_robots // len(jobs)) + 1
+    jobs = jobs * n_repeats
+    jobs = jobs[: args.num_robots]
+
     logging.info("Created %d jobs", len(jobs))
 
     return jobs
