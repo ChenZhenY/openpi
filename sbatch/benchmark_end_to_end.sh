@@ -5,15 +5,18 @@
 #SBATCH --partition=rl2-lab
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=52
-#SBATCH --gpus-per-node="l40s:3"
+#SBATCH --cpus-per-task=42
+#SBATCH --gpus-per-node="l40s:2"
 #SBATCH --nodelist=dynamics
 #SBATCH --mem-per-gpu=128
+#SBATCH --array=0-2
 
 set -e
 
-BATCH_SIZE=1
-NUM_ROBOTS=9
+BATCH_SIZES=(1 2 4)
+BATCH_SIZE=${BATCH_SIZES[$SLURM_ARRAY_TASK_ID]}
+
+#TODO: ablate RTC
 ACTION_BROKER_TYPE=SYNC
 RTC_S_MIN=5
 RTC_D_INIT=3
@@ -41,7 +44,7 @@ trap cleanup EXIT INT TERM
 
 # --- Step 1: Launch the server on the first node ---
 srun --ntasks=1 --gpus-per-node="l40s:1" --cpus-per-task=2 --overlap --exact -w $NODE bash -c "
-    echo 'Starting server on $NODE...'
+    echo 'Starting server on $NODE... for batch_size=$BATCH_SIZE'
     source ~/.bashrc
     source .venv/bin/activate
     uv run scripts/serve_policy.py --env=LIBERO --batch-size=$BATCH_SIZE --log-dir=logs/server
@@ -59,22 +62,24 @@ else
     exit 1
 fi
 
-srun --ntasks=1 --gpus-per-node="l40s:2" --cpus-per-task=50 --overlap --exact -w $NODE bash -c "
-    echo 'Starting client on $NODE...'
-    source scripts/libero_client.sh
-    ./examples/libero/.venv/bin/python examples/libero/main_multi_robot_runtime.py \
-        --host $NODE \
-        --num-robots $NUM_ROBOTS \
-        --task-suite-name libero_10 \
-        --num-trials-per-robot 10 \
-        --action-horizon 10 \
-        --control-hz 20 \
-        --output-dir data/libero/benchmark_end_to_end/batch_size_${BATCH_SIZE}_num_robots_${NUM_ROBOTS}_broker_type_${ACTION_BROKER_TYPE}} \
-        --progress-type logging \
-        --log-dir logs/client \
-        --overwrite \
-        ${ACTION_CHUNK_BROKER_FLAGS}
-"
+for NUM_ROBOTS in 1 5 10 20 30 40; do
+    srun --ntasks=1 --gpus-per-node="l40s:1" --cpus-per-task=40 --overlap --exact -w $NODE bash -c "
+        echo 'Starting client on $NODE... for num_robots=$NUM_ROBOTS'
+        source scripts/libero_client.sh
+        ./examples/libero/.venv/bin/python examples/libero/main_multi_robot_runtime.py \
+            --host $NODE \
+            --num-robots $NUM_ROBOTS \
+            --task-suite-name libero_10 \
+            --num-trials-per-robot 10 \
+            --action-horizon 10 \
+            --control-hz 20 \
+            --output-dir data/libero/benchmark_end_to_end/batch_size_${BATCH_SIZE}_num_robots_${NUM_ROBOTS}_broker_type_${ACTION_BROKER_TYPE} \
+            --progress-type logging \
+            --log-dir logs/client \
+            --overwrite \
+            ${ACTION_CHUNK_BROKER_FLAGS}
+    "
+done
 echo "======================================"
 echo "Completed run with args.action-chunk-broker.broker-type=$ACTION_BROKER_TYPE"
 echo "======================================"
