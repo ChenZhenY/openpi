@@ -73,6 +73,7 @@ for NUM_ROBOTS in 1 5 10 20 30 40; do
             --num-trials-per-robot 10 \
             --action-horizon 10 \
             --control-hz 20 \
+            --max-steps 520 \
             --output-dir data/libero/benchmark_end_to_end/batch_size_${BATCH_SIZE}_num_robots_${NUM_ROBOTS}_broker_type_${ACTION_BROKER_TYPE} \
             --progress-type logging \
             --log-dir logs/client \
