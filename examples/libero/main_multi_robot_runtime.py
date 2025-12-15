@@ -3,8 +3,7 @@ import logging
 import pathlib
 import multiprocessing
 import shutil
-from contextlib import nullcontext
-from typing import Union, List
+from typing import Union, List, Literal
 
 import numpy as np
 from libero.libero import benchmark
@@ -24,7 +23,7 @@ from rich.table import Table
 from examples.libero import utils
 from examples.libero import logging_config
 from examples.libero.env import LiberoSimEnvironment
-from examples.libero.progress_manager import ProgressManager
+from examples.libero.progress_manager import get_progress_manager
 from examples.libero.subscribers.saver import Saver, Result
 from examples.libero.subscribers.progress_subscriber import ProgressSubscriber
 
@@ -90,7 +89,7 @@ class Args:
     seed: int = 7  # Random Seed (for reproducibility)
     output_dir: str = "data/libero/multi_robot_videos"
     overwrite: bool = False
-    show_progress: bool = True
+    progress_type: Literal["verbose", "concise", "logging", None] = "verbose"
     debug: bool = False  # Run in single process with immediate progress output
 
     def create_broker_config(self, policy) -> Union[SyncBrokerConfig, RTCBrokerConfig]:
@@ -160,26 +159,31 @@ def create_runtime(args: Args, job: Job) -> _runtime.Runtime:
         "num_episodes": len(job.initial_states),
     }
 
-    runtime = _runtime.Runtime(
-        environment=env,
-        agent=agent,
-        subscribers=[
-            Saver(
-                out_dir=pathlib.Path(args.output_dir),
-                environment=env,
-                action_chunk_broker=broker,
-                task_suite_name=job.task_suite_name,
-                task_id=job.task_id,
-                robot_idx=robot_idx,
-            ),
+    subscribers = [
+        Saver(
+            out_dir=pathlib.Path(args.output_dir),
+            environment=env,
+            action_chunk_broker=broker,
+            task_suite_name=job.task_suite_name,
+            task_id=job.task_id,
+            robot_idx=robot_idx,
+        ),
+    ]
+    if args.progress_type is not None:
+        subscribers.append(
             ProgressSubscriber(
                 queue=_progress_queue,
                 robot_idx=robot_idx,
                 job_info=job_info,
                 environment=env,
                 update_frequency=10,
-            ),
-        ],
+            )
+        )
+
+    runtime = _runtime.Runtime(
+        environment=env,
+        agent=agent,
+        subscribers=subscribers,
         max_hz=args.control_hz,
         num_episodes=len(job.initial_states),
         max_episode_steps=env._max_episode_steps,  # type: ignore[attr-defined]
@@ -198,16 +202,7 @@ def _robot_worker(task_args) -> None:
 def run_robots(args: Args, jobs: List[Job]) -> None:
     counter = multiprocessing.Value("i", 0)  # for assigning robot indices
 
-    # Use ProgressManager context manager
-    with (
-        ProgressManager(
-            num_robots=args.num_robots,
-            total_jobs=len(jobs),
-            max_steps=args.max_steps,
-        )
-        if args.show_progress
-        else nullcontext()
-    ) as progress_manager:
+    with get_progress_manager(args.progress_type) as progress_manager:
         if args.debug:
             init_worker(args, counter, progress_manager.queue)
             for job in jobs:
