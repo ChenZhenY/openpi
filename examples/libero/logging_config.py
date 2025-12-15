@@ -2,9 +2,11 @@
 
 import logging
 from rich.logging import RichHandler
+from pathlib import Path
+from typing import Optional
 
 
-def setup_logging(level: int = logging.INFO) -> None:
+def setup_logging(level: int = logging.INFO, log_path: Optional[Path] = None) -> None:
     """Configure logging for the entire application.
 
     Args:
@@ -13,17 +15,21 @@ def setup_logging(level: int = logging.INFO) -> None:
     This should be called once at the start of each main script.
     Safe to call multiple times (force=True ensures it overrides existing config).
     """
+
+    handlers: list[logging.Handler] = [
+        RichHandler(
+            rich_tracebacks=True,
+            show_time=True,
+            show_path=False,
+        )
+    ]
+    if log_path is not None:
+        handlers.append(logging.FileHandler(log_path))
     logging.basicConfig(
         level=level,
         format="%(message)s",
         datefmt="[%X]",
-        handlers=[
-            RichHandler(
-                rich_tracebacks=True,
-                show_time=True,
-                show_path=False,
-            )
-        ],
+        handlers=handlers,
         force=True,  # Override any existing configuration
     )
 

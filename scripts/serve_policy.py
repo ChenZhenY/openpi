@@ -1,5 +1,7 @@
 import dataclasses
+import datetime
 import logging
+import pathlib
 import socket
 from typing import Any
 
@@ -56,6 +58,9 @@ class Args:
 
     # Number of steps to use for sampling.
     num_steps: int = 10
+
+    # Log directory to save the logs to.
+    log_dir: str | None = None
 
 
 # Default checkpoints that should be used for each environment.
@@ -116,6 +121,16 @@ def create_policy(args: Args) -> _policy.Policy:
 
 
 def main(args: Args) -> None:
+    if args.log_dir is not None:
+        log_path = (
+            pathlib.Path(args.log_dir)
+            / f"serve_policy_{datetime.datetime.now(tz=datetime.UTC).strftime('%Y%m%d_%H%M%S')}.log"
+        )
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        logging.basicConfig(level=logging.INFO, datefmt="[%X]", force=True, filename=log_path)
+    else:
+        logging.basicConfig(level=logging.INFO, datefmt="[%X]", force=True)
+
     # Create policy factory to avoid CUDA context fork issues
     def policy_factory():
         policy = create_policy(args)
@@ -160,5 +175,4 @@ def main(args: Args) -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, force=True)
     main(tyro.cli(Args))

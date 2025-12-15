@@ -6,7 +6,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=52
-#SBATCH --gpus-per-node="l40s:2"
+#SBATCH --gpus-per-node="l40s:3"
 #SBATCH --nodelist=dynamics
 #SBATCH --mem-per-gpu=128
 
@@ -40,28 +40,27 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # --- Step 1: Launch the server on the first node ---
-echo "Starting server on $NODE..."
-srun --nodes=1 --ntasks=1 --gpus-per-node="l40s:1" --cpus-per-task=2 -w $NODE bash -c "
+srun --ntasks=1 --gpus-per-node="l40s:1" --cpus-per-task=2 --overlap --exact -w $NODE bash -c "
+    echo 'Starting server on $NODE...'
     source ~/.bashrc
     source .venv/bin/activate
-    uv run scripts/serve_policy.py --env=LIBERO --batch-size=$BATCH_SIZE
+    uv run scripts/serve_policy.py --env=LIBERO --batch-size=$BATCH_SIZE --log-dir=logs/server
 " &
 SERVER_JOB_PID=$!
 echo "Server launched (PID $SERVER_JOB_PID). Waiting for it to initialize..."
-sleep 10
 
 # --- Step 2: Run the client on the second node ---
 if [ "$ACTION_BROKER_TYPE" = "RTC" ]; then
-    ACTION_CHUNK_BROKER_FLAGS="--args.action-chunk-broker.broker-type RTC --args.action-chunk-broker.s-min $RTC_S_MIN --args.action-chunk-broker.d-init $RTC_D_INIT"
+    ACTION_CHUNK_BROKER_FLAGS="--action-chunk-broker.broker-type RTC --action-chunk-broker.s-min $RTC_S_MIN --action-chunk-broker.d-init $RTC_D_INIT"
 elif [ "$ACTION_BROKER_TYPE" = "SYNC" ]; then
-    ACTION_CHUNK_BROKER_FLAGS="--args.action-chunk-broker.broker-type SYNC"
+    ACTION_CHUNK_BROKER_FLAGS="--action-chunk-broker.broker-type SYNC"
 else
     echo "Invalid action broker type: $ACTION_BROKER_TYPE"
     exit 1
 fi
 
-echo "Starting client on $NODE..."
-srun --nodes=1 --ntasks=1 --gpus-per-node="l40s:2" --cpus-per-task=50 -w $NODE bash -c "
+srun --ntasks=1 --gpus-per-node="l40s:2" --cpus-per-task=50 --overlap --exact -w $NODE bash -c "
+    echo 'Starting client on $NODE...'
     source scripts/libero_client.sh
     ./examples/libero/.venv/bin/python examples/libero/main_multi_robot_runtime.py \
         --host $NODE \
@@ -72,10 +71,10 @@ srun --nodes=1 --ntasks=1 --gpus-per-node="l40s:2" --cpus-per-task=50 -w $NODE b
         --control-hz 20 \
         --output-dir data/libero/benchmark_end_to_end/batch_size_${BATCH_SIZE}_num_robots_${NUM_ROBOTS}_broker_type_${ACTION_BROKER_TYPE}} \
         --progress-type logging \
+        --log-dir logs/client \
         --overwrite \
         ${ACTION_CHUNK_BROKER_FLAGS}
 "
-
 echo "======================================"
 echo "Completed run with args.action-chunk-broker.broker-type=$ACTION_BROKER_TYPE"
 echo "======================================"

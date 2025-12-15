@@ -3,7 +3,8 @@ import logging
 import pathlib
 import multiprocessing
 import shutil
-from typing import Union, List, Literal
+from typing import Union, List, Literal, Optional
+import datetime
 
 import numpy as np
 from libero.libero import benchmark
@@ -90,6 +91,7 @@ class Args:
     output_dir: str = "data/libero/multi_robot_videos"
     overwrite: bool = False
     progress_type: Literal["verbose", "concise", "logging", None] = "verbose"
+    log_dir: Optional[str] = None
     debug: bool = False  # Run in single process with immediate progress output
 
     def create_broker_config(self, policy) -> Union[SyncBrokerConfig, RTCBrokerConfig]:
@@ -310,6 +312,14 @@ def aggregate_results(output_path: pathlib.Path) -> None:
 
 
 def main(args: Args) -> None:
+    if args.log_dir is not None:
+        log_file_name = f"libero_multi_robot_runtime_{datetime.datetime.now(tz=datetime.timezone.utc).strftime('%Y%m%d_%H%M%S')}.log"
+        log_file_path = pathlib.Path(args.log_dir) / log_file_name
+        pathlib.Path(args.log_dir).mkdir(parents=True, exist_ok=True)
+        logging_config.setup_logging(log_path=log_file_path)
+    else:
+        logging_config.setup_logging()
+
     if not args.overwrite and pathlib.Path(args.output_dir).exists():
         raise ValueError(f"Output path {args.output_dir} already exists")
     if args.overwrite:
@@ -327,11 +337,14 @@ def main(args: Args) -> None:
     np.random.seed(args.seed)
 
     jobs = create_jobs(args)
+    _ = _websocket_client_policy.WebsocketClientPolicy(
+        args.host,
+        args.port,
+    )  # to wait for the server to be ready
     run_robots(args, jobs)
     aggregate_results(pathlib.Path(args.output_dir))
 
 
 if __name__ == "__main__":
     multiprocessing.set_start_method("spawn")  # allows multiple processes with envs
-    logging_config.setup_logging()
     main(tyro.cli(Args))
