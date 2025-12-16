@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=end_to_end
-#SBATCH --output=logs/end_to_end_%j.out
-#SBATCH --error=logs/end_to_end_%j.err
+#SBATCH --output=logs/end_to_end_%A_%a.out
+#SBATCH --error=logs/end_to_end_%A_%a.err
 #SBATCH --partition=rl2-lab
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -17,7 +17,7 @@ BATCH_SIZES=(1 2 4)
 BATCH_SIZE=${BATCH_SIZES[$SLURM_ARRAY_TASK_ID]}
 
 #TODO: ablate RTC
-ACTION_BROKER_TYPE=SYNC
+ACTION_BROKER_TYPE=RTC
 RTC_S_MIN=5
 RTC_D_INIT=3
 

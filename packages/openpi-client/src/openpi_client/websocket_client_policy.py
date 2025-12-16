@@ -50,9 +50,9 @@ class WebsocketClientPolicy(_base_policy.BasePolicy):
         self,
         obs: Dict,
         prev_action: Optional[np.ndarray] = None,
-        use_rtc: bool = True,
+        use_rtc: bool = False,
         s_param: int = 5,
-        d_param: int = 4,
+        d_param: int = 3,
     ) -> Dict:  # noqa: UP006
         data = {
             "observation": obs,

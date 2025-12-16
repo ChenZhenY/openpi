@@ -124,25 +124,17 @@ class Policy(BasePolicy):
         times: dict[str, float] = {}
 
         if use_rtc:
-            if prev_action is None:
-                # First RTC call: fall back to normal sampling (but with RTC parameters).
-                origin_actions, times = self._sample_actions(
-                    sample_rng_or_pytorch_device,
-                    observation,
-                    **self._sample_kwargs,
-                )
-            else:
-                # Subsequent RTC call: use guided_inference. This API returns only actions,
-                # so we construct a simple timing dict here.
-                prev_action = jnp.asarray(prev_action)[np.newaxis, ...]  # Add batch dimension
-                guided_start = time.monotonic()
-                origin_actions = self._guided_inference(
-                    sample_rng_or_pytorch_device,
-                    prev_action,
-                    observation,
-                    **self._sample_kwargs,
-                )
-                times["guided_inference"] = time.monotonic() - guided_start
+            # Subsequent RTC call: use guided_inference. This API returns only actions,
+            # so we construct a simple timing dict here.
+            prev_action = jnp.asarray(prev_action)[np.newaxis, ...]  # Add batch dimension
+            guided_start = time.monotonic()
+            origin_actions = self._guided_inference(
+                sample_rng_or_pytorch_device,
+                prev_action,
+                observation,
+                **self._sample_kwargs,
+            )
+            times["guided_inference"] = time.monotonic() - guided_start
 
             outputs = {
                 "state": inputs["state"],
@@ -201,58 +193,59 @@ class Policy(BasePolicy):
 
         # If inputs look like websocket envelopes (with prev_action / use_rtc / s_param / d_param),
         # use the per-example infer() path so that guided_inference and RTC semantics are respected.
-        envelope_keys = {"observation", "prev_action", "use_rtc", "s_param", "d_param"}
-        has_envelope_like = any(isinstance(obs, dict) and any(k in obs for k in envelope_keys) for obs in obs_batch)
+        # FIXME: assume all rtc if first is rtc
+        is_rtc = any(isinstance(obs, dict) and "use_rtc" in obs and obs["use_rtc"] for obs in obs_batch)
 
-        if has_envelope_like:
-            results: list[dict] = []
-            for obs in obs_batch:
-                # Handle both pure observation dicts and websocket-style envelopes.
-                if isinstance(obs, dict) and "observation" in obs:
-                    inner_obs = obs["observation"]
-                    prev_action = obs.get("prev_action", None)
-                    use_rtc = obs.get("use_rtc", False)
-                    s_param = obs.get("s_param", 5)
-                    d_param = obs.get("d_param", 4)
-                    res = self.infer(
-                        inner_obs,
-                        prev_action=prev_action,
-                        use_rtc=use_rtc,
-                        noise=None,
-                        s_param=s_param,
-                        d_param=d_param,
-                    )
-                else:
-                    # Fallback: treat as raw observation dict with default non-RTC settings.
-                    res = self.infer(obs)
-                results.append(res)
-            return results
+        if is_rtc:
+            print("RTC batch inference")
+            assert len(obs_batch) == 1, "RTC batch inference only supported for single observation"
+            obs = obs_batch[0]
+            print("obs")
+            inner_obs = obs["observation"]
+            prev_action = obs["prev_action"]
+            use_rtc = obs["use_rtc"]
+            s_param = obs["s_param"]
+            d_param = obs["d_param"]
+            prev_action = _transforms.pad_to_dim(prev_action, self._model.action_dim, axis=-1)
+            print(f"prev_action: {prev_action}, use_rtc: {use_rtc}, s_param: {s_param}, d_param: {d_param}")
+            res = self.infer(
+                inner_obs,
+                prev_action=prev_action,
+                use_rtc=use_rtc,
+                noise=None,
+                s_param=s_param,
+                d_param=d_param,
+            )
+            return [res]
+
+        # FIXME: we only get envelopes, so we need to convert them to observation dicts
+        obs_batch = [obs.get("observation", obs) for obs in obs_batch]
+        for obs in obs_batch:
+            assert "observation/state" in obs, "Observation must contain state"
 
         # Fast batched path for plain observation dicts (non-RTC).
-        first_obs = obs_batch[0]
         batch_size = len(obs_batch)
 
         # Stack observations into batch format
         batched_obs = {}
-        for key in first_obs:
-            if key in first_obs:
-                # Stack all values for this key
-                values = [obs[key] for obs in obs_batch]
-                if isinstance(values[0], np.ndarray):
-                    batched_obs[key] = np.stack(values, axis=0)
-                elif isinstance(values[0], dict):
-                    # Handle nested dictionaries (like images)
-                    batched_obs[key] = {}
-                    for subkey in values[0]:
-                        subvalues = [obs[key][subkey] for obs in obs_batch]
-                        if isinstance(subvalues[0], np.ndarray):
-                            batched_obs[key][subkey] = np.stack(subvalues, axis=0)
-                        else:
-                            batched_obs[key][subkey] = subvalues
-                else:
-                    batched_obs[key] = values
+        # FIXME: don't hardcode these values
+        keys = ("observation/state", "observation/image", "observation/wrist_image", "prompt")
+        for key in keys:
+            # Stack all values for this key
+            values = [obs[key] for obs in obs_batch]
+            if isinstance(values[0], np.ndarray):
+                batched_obs[key] = np.stack(values, axis=0)
+            elif isinstance(values[0], dict):
+                # Handle nested dictionaries (like images)
+                batched_obs[key] = {}
+                for subkey in values[0]:
+                    subvalues = [obs[key][subkey] for obs in obs_batch]
+                    if isinstance(subvalues[0], np.ndarray):
+                        batched_obs[key][subkey] = np.stack(subvalues, axis=0)
+                    else:
+                        batched_obs[key][subkey] = subvalues
             else:
-                batched_obs[key] = [obs.get(key, None) for obs in obs_batch]
+                batched_obs[key] = values
 
         # Apply transforms to batched observation
         inputs = jax.tree.map(lambda x: x, batched_obs)

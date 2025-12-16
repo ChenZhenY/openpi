@@ -9,6 +9,7 @@ from openpi_client import base_policy as _base_policy
 from examples.libero.schemas import ActionChunk
 from openpi_client.action_chunkers.action_chunk_broker import ActionChunkBroker
 from collections import deque
+import numpy as np
 
 
 class InferenceTimeRTCBroker(ActionChunkBroker, _base_policy.BasePolicy):
@@ -45,12 +46,18 @@ class InferenceTimeRTCBroker(ActionChunkBroker, _base_policy.BasePolicy):
         self._step_duration = step_duration
 
     def _infer(
-        self, obs: Dict, infer_step: int, use_rtc: bool, steps_since_last_inference: int, estimated_delay: int
+        self,
+        obs: Dict,
+        infer_step: int,
+        use_rtc: bool,
+        steps_since_last_inference: int,
+        estimated_delay: int,
+        prev_action: np.ndarray,
     ) -> ActionChunk:
         request_timestamp = time.time()
         if use_rtc:
             response = self._policy.infer(
-                obs, use_rtc=True, s_param=steps_since_last_inference, d_param=estimated_delay
+                obs, use_rtc=True, s_param=steps_since_last_inference, d_param=estimated_delay, prev_action=prev_action
             )
         else:
             response = self._policy.infer(obs)
@@ -79,8 +86,9 @@ class InferenceTimeRTCBroker(ActionChunkBroker, _base_policy.BasePolicy):
                 infer_step = self._cur_step
                 steps_since_last_inference = self._action_index
                 estimated_delay = max(self._delays)
+                prev_action = self.current_action_chunk.actions
 
-            action_chunk = self._infer(obs, infer_step, True, steps_since_last_inference, estimated_delay)
+            action_chunk = self._infer(obs, infer_step, True, steps_since_last_inference, estimated_delay, prev_action)
 
             with self._condition:
                 self._action_chunks.append(action_chunk)
@@ -103,7 +111,7 @@ class InferenceTimeRTCBroker(ActionChunkBroker, _base_policy.BasePolicy):
             # Assume no latency for step 0, so we wait until we have an action chunk
             if len(self._action_chunks) == 0:
                 assert self._cur_step == 0, "First inference should be for step 0"
-                action_chunk = self._infer(obs, self._cur_step, False, 0, 0)
+                action_chunk = self._infer(obs, self._cur_step, False, 0, 0, np.ndarray([]))
                 self._action_chunks.append(action_chunk)
 
             if self._action_index >= self._s_min:
