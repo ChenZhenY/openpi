@@ -17,7 +17,7 @@ BATCH_SIZES=(1 2 4)
 BATCH_SIZE=${BATCH_SIZES[$SLURM_ARRAY_TASK_ID]}
 
 #TODO: ablate RTC
-ACTION_BROKER_TYPE=RTC
+ACTION_BROKER_TYPE=SYNC
 RTC_S_MIN=5
 RTC_D_INIT=3
 
@@ -35,8 +35,14 @@ cleanup() {
     echo "Cleaning up..."
     if [ ! -z "$SERVER_JOB_PID" ] && kill -0 $SERVER_JOB_PID 2>/dev/null; then
         echo "Stopping server process (PID: $SERVER_JOB_PID)"
-        kill $SERVER_JOB_PID
-        wait $SERVER_JOB_PID 2>/dev/null || true
+        kill $SERVER_JOB_PID 2>/dev/null || true
+        # Give it a moment to terminate gracefully
+        sleep 2
+        # Force kill if still running
+        if kill -0 $SERVER_JOB_PID 2>/dev/null; then
+            echo "Force killing server process"
+            kill -9 $SERVER_JOB_PID 2>/dev/null || true
+        fi
     fi
     echo "Cleanup complete"
 }
@@ -62,7 +68,7 @@ else
     exit 1
 fi
 
-for NUM_ROBOTS in 1 5 10 20 30 40; do
+for NUM_ROBOTS in 1 5 10 20; do
     srun --ntasks=1 --gpus-per-node="l40s:1" --cpus-per-task=40 --overlap --exact -w $NODE bash -c "
         echo 'Starting client on $NODE... for num_robots=$NUM_ROBOTS'
         source scripts/libero_client.sh
@@ -81,6 +87,13 @@ for NUM_ROBOTS in 1 5 10 20 30 40; do
             ${ACTION_CHUNK_BROKER_FLAGS}
     "
 done
+
+# Explicitly cleanup the server before exiting
+echo "======================================"
+echo "All client runs completed. Shutting down server..."
+cleanup
+# Prevent the EXIT trap from running cleanup again
+trap - EXIT
 echo "======================================"
 echo "Completed run with args.action-chunk-broker.broker-type=$ACTION_BROKER_TYPE"
 echo "======================================"
