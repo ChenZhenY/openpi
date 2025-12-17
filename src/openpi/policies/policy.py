@@ -197,17 +197,14 @@ class Policy(BasePolicy):
         is_rtc = any(isinstance(obs, dict) and "use_rtc" in obs and obs["use_rtc"] for obs in obs_batch)
 
         if is_rtc:
-            print("RTC batch inference")
             assert len(obs_batch) == 1, "RTC batch inference only supported for single observation"
             obs = obs_batch[0]
-            print("obs")
             inner_obs = obs["observation"]
             prev_action = obs["prev_action"]
             use_rtc = obs["use_rtc"]
             s_param = obs["s_param"]
             d_param = obs["d_param"]
             prev_action = _transforms.pad_to_dim(prev_action, self._model.action_dim, axis=-1)
-            print(f"prev_action: {prev_action}, use_rtc: {use_rtc}, s_param: {s_param}, d_param: {d_param}")
             res = self.infer(
                 inner_obs,
                 prev_action=prev_action,

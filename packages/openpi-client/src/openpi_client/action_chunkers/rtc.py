@@ -33,7 +33,7 @@ class InferenceTimeRTCBroker(ActionChunkBroker, _base_policy.BasePolicy):
         self._cur_step: int = -1
 
         self._action_chunks: List[ActionChunk] = []
-        self._action_index: int = -1
+        self._action_index: int = 0
 
         self._lock = threading.Lock()
         self._condition = threading.Condition(self._lock)
@@ -106,7 +106,6 @@ class InferenceTimeRTCBroker(ActionChunkBroker, _base_policy.BasePolicy):
         with self._condition:
             self._obs = obs
             self._cur_step = obs["step"]
-            self._action_index += 1
 
             # Assume no latency for step 0, so we wait until we have an action chunk
             if len(self._action_chunks) == 0:
@@ -123,6 +122,7 @@ class InferenceTimeRTCBroker(ActionChunkBroker, _base_policy.BasePolicy):
             else:
                 action = self.current_action_chunk.get_action(self._action_index)
                 action_index = self._action_index
+                self._action_index += 1
 
             results = {
                 "actions": action,
@@ -138,4 +138,4 @@ class InferenceTimeRTCBroker(ActionChunkBroker, _base_policy.BasePolicy):
             self._policy.reset()
             self._action_chunks = []
             self._cur_step = -1
-            self._action_index = -1
+            self._action_index = 0
