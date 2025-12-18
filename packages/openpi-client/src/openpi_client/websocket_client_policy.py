@@ -57,10 +57,13 @@ class WebsocketClientPolicy(_base_policy.BasePolicy):
         s_param: Optional[int] = None,
         d_param: Optional[int] = None,
     ) -> Dict:  # noqa: UP006
-        request = messages.InferRequest(
-            observation=obs, prev_action=prev_action, use_rtc=use_rtc, s_param=s_param, d_param=d_param
-        )
-        data = self._packer.pack(asdict(request))
+        infer_type = messages.InferType.SYNC
+        params = None
+        if use_rtc:
+            infer_type = messages.InferType.INFERENCE_TIME_RTC
+            params = messages.RTCParams(prev_action=prev_action, s_param=s_param, d_param=d_param)  # type: ignore
+        request = messages.InferRequest(observation=obs, infer_type=infer_type, params=params)
+        data = msgpack_numpy.packb(asdict(request))
 
         # Use lock to ensure thread-safe WebSocket communication
         with self._ws_lock:
@@ -73,6 +76,7 @@ class WebsocketClientPolicy(_base_policy.BasePolicy):
         return msgpack_numpy.unpackb(response)
 
 
+# TODO: handle infer request packing
 class AsyncWebsocketClientPolicy:
     """Async version of WebsocketClientPolicy for high-performance concurrent requests.
 
@@ -149,7 +153,7 @@ class AsyncWebsocketClientPolicy:
 
         conn = await self._get_connection()
         try:
-            data = self._packer.pack(obs)
+            data = msgpack_numpy.packb(obs)
             await conn.send(data)
             response = await conn.recv()
             if isinstance(response, str):

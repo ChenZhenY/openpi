@@ -8,6 +8,7 @@ from typing_extensions import override
 from openpi_client import base_policy as _base_policy
 from examples.libero.schemas import ActionChunk
 from openpi_client.action_chunkers.action_chunk_broker import ActionChunkBroker
+from openpi_client import websocket_client_policy as _websocket_client_policy
 from collections import deque
 import numpy as np
 
@@ -20,7 +21,7 @@ class InferenceTimeRTCBroker(ActionChunkBroker, _base_policy.BasePolicy):
 
     def __init__(
         self,
-        policy: _base_policy.BasePolicy,
+        policy: _websocket_client_policy.WebsocketClientPolicy,
         action_horizon: int,
         s_min: int = 5,
         d_init: int = 3,
@@ -49,18 +50,14 @@ class InferenceTimeRTCBroker(ActionChunkBroker, _base_policy.BasePolicy):
         self,
         obs: Dict,
         infer_step: int,
-        use_rtc: bool,
         steps_since_last_inference: int,
         estimated_delay: int,
         prev_action: np.ndarray,
     ) -> ActionChunk:
         request_timestamp = time.time()
-        if use_rtc:
-            response = self._policy.infer(
-                obs, use_rtc=True, s_param=steps_since_last_inference, d_param=estimated_delay, prev_action=prev_action
-            )
-        else:
-            response = self._policy.infer(obs)
+        response = self._policy.infer(
+            obs, use_rtc=True, s_param=steps_since_last_inference, d_param=estimated_delay, prev_action=prev_action
+        )
         actions = response["actions"]
         response_timestamp = time.time()
 
@@ -88,7 +85,7 @@ class InferenceTimeRTCBroker(ActionChunkBroker, _base_policy.BasePolicy):
                 estimated_delay = max(self._delays)
                 prev_action = self.current_action_chunk.actions
 
-            action_chunk = self._infer(obs, infer_step, True, steps_since_last_inference, estimated_delay, prev_action)
+            action_chunk = self._infer(obs, infer_step, steps_since_last_inference, estimated_delay, prev_action)
 
             with self._condition:
                 self._action_chunks.append(action_chunk)
@@ -110,7 +107,8 @@ class InferenceTimeRTCBroker(ActionChunkBroker, _base_policy.BasePolicy):
             # Assume no latency for step 0, so we wait until we have an action chunk
             if len(self._action_chunks) == 0:
                 assert self._cur_step == 0, "First inference should be for step 0"
-                action_chunk = self._infer(obs, self._cur_step, False, 0, 0, np.ndarray([]))
+                # TODO: don't hardcode the action dimension
+                action_chunk = self._infer(obs, self._cur_step, 0, 0, np.zeros((10, 7)))
                 self._action_chunks.append(action_chunk)
 
             if self._action_index >= self._s_min:

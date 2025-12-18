@@ -188,7 +188,7 @@ class WebsocketPolicyServer:
                     num_real = len(batch)
                     # Pad batch to batch_size with to avoid JIT recompilation
                     while len(batch) < batch_size:
-                        batch.append(batch[-1].copy())
+                        batch.append(batch[-1])
 
                     # TODO: can we support multiple infer_types in the same batch?
                     assert len({request.infer_type for request in batch}) == 1, (

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from enum import Enum
-import jax
 import numpy as np
+from typing import Optional, Union
 
 
 # TODO: merge with broker types
@@ -14,7 +14,7 @@ class InferType(Enum):
 
 @dataclass
 class RTCParams:
-    prev_action: np.ndarray | jax.Array
+    prev_action: np.ndarray
     s_param: int
     d_param: int
 
@@ -35,7 +35,7 @@ class TrainTimeRTCParams:
 class InferRequest:
     observation: dict
     infer_type: InferType
-    params: RTCParams | VlashParams | TrainTimeRTCParams | None = None
+    params: Optional[Union[RTCParams, VlashParams, TrainTimeRTCParams]] = None
 
 
 @dataclass
