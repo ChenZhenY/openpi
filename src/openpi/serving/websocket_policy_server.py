@@ -7,8 +7,10 @@ import traceback
 from typing import Any
 import uuid
 
-import jax.numpy as jnp
 from openpi_client import msgpack_numpy
+from openpi_client.messages import InferRequest
+from openpi_client.messages import InferType
+from openpi_client.messages import RTCParams
 import websockets.asyncio.server as _server
 import websockets.frames
 import zmq
@@ -158,9 +160,6 @@ class WebsocketPolicyServer:
         poller.register(socket, zmq.POLLIN)
 
         try:
-            # Create dummy observation for padding (reused across batches)
-            dummy_obs = self._policy.make_example()
-
             while True:
                 request_ids = []
                 batch = []
@@ -187,9 +186,14 @@ class WebsocketPolicyServer:
 
                 if batch:
                     num_real = len(batch)
-                    # Pad batch to batch_size with dummy observations to avoid JIT recompilation
+                    # Pad batch to batch_size with to avoid JIT recompilation
                     while len(batch) < batch_size:
-                        batch.append(dummy_obs)
+                        batch.append(batch[-1].copy())
+
+                    # TODO: can we support multiple infer_types in the same batch?
+                    assert len({request.infer_type for request in batch}) == 1, (
+                        "All requests must have the same infer_type"
+                    )
 
                     logger.info(f"Inferring batch of size {batch_size} (padded from {num_real} real requests)")
                     actions = self._policy.infer_batch(batch)
@@ -211,7 +215,8 @@ class WebsocketPolicyServer:
 
         while True:
             try:
-                obs = msgpack_numpy.unpackb(await websocket.recv())
+                message = msgpack_numpy.unpackb(await websocket.recv())
+                request = InferRequest(**message)
 
                 request_id = self.last_request_id + 1
                 self.last_request_id = request_id
@@ -223,7 +228,7 @@ class WebsocketPolicyServer:
 
                 # ROUTER sends: identity frame + message frame
                 await self._socket.send(self._worker_identity, zmq.SNDMORE)
-                await self._socket.send_pyobj((request_id, obs))
+                await self._socket.send_pyobj((request_id, request))
                 logger.info(f"Sent request {request_id} via ZeroMQ")
 
                 action = await self.responses[request_id]
@@ -249,21 +254,24 @@ class WebsocketPolicyServer:
         logger.info("Warming up policy...")
         observation = self._policy.make_example()
 
-        # Warm up with full batch_size (we always pad to this size)
-        logger.info(f"Warming up batch size {batch_size}")
-        batch = [observation] * batch_size
-        self._policy.infer_batch(batch)
+        requests = []
 
-        if batch_size == 1:
-            logger.info(f"Warming up RTC batch size {batch_size}")
-            envelope = {}
-            envelope["observation"] = observation
-            envelope["use_rtc"] = True
-            envelope["s_param"] = 5
-            envelope["d_param"] = 3
-            # FIXME: don't hardcode these values
-            envelope["prev_action"] = jnp.zeros((10, 7))
-            batch = [envelope] * batch_size
+        requests.append(InferRequest(observation=observation, infer_type=InferType.SYNC, params=None))
+        requests.append(
+            InferRequest(
+                observation=observation,
+                infer_type=InferType.INFERENCE_TIME_RTC,
+                params=RTCParams(
+                    prev_action=self._policy.make_example_actions(),
+                    s_param=5,
+                    d_param=3,
+                ),
+            )
+        )
+        for request in requests:
+            logger.info(f"Warming up {request.infer_type} for batch_size={batch_size}")
+            # Warm up with full batch_size (we always pad to this size)
+            batch = [request] * batch_size
             self._policy.infer_batch(batch)
 
 

@@ -127,7 +127,7 @@ def main(args: Args) -> None:
         port=args.port,
         api_key=args.api_key,
     )
-    logger.info(f"Server metadata: {policy.get_server_metadata()}")
+    logger.info(f"Server metadata: {policy.server_metadata}")
 
     # Send a few observations to make sure the model is loaded.
     for _ in range(2):

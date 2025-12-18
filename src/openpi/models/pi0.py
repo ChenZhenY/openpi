@@ -1,5 +1,4 @@
 import logging
-import pickle
 import time
 
 import einops
@@ -278,24 +277,20 @@ class Pi0(_model.BaseModel):
         x_0, _ = jax.lax.while_loop(cond, step, (noise, 1.0))
         return x_0
 
-    def guided_inference(
+    def guided_flow_matching(
         self,
-        rng: at.KeyArrayLike,
-        prev_action: _model.Actions,
         observation: _model.Observation,
-        *,
-        num_steps: int | at.Int[at.Array, ""] = 10,
-        s: int = 5,
-        d: int = 4,
+        noise: at.Float[at.Array, "b ah ad"],
+        kv_cache: tuple[at.Float[at.Array, "l b _t _k _h"], at.Float[at.Array, "l b _t _v _h"]],
+        dt: float,
+        prefix_tokens: at.Float[at.Array, "b s emb"],
+        prefix_mask: at.Bool[at.Array, "b s"],
+        prev_action: _model.Actions,
+        s: at.Int[at.Array, " b"],
+        d: at.Int[at.Array, " b"],
         beta: float = 8.0,
     ) -> _model.Actions:
-        observation = _model.preprocess_observation(None, observation, train=False)
-        # note that we use the convention more common in diffusion literature, where t=1 is noise and t=0 is the target
-        # distribution. yes, this is the opposite of the pi0 paper, and I'm sorry.
-        dt = -1.0 / num_steps
         batch_size = observation.state.shape[0]
-        noise = jax.random.normal(rng, (batch_size, self.action_horizon, self.action_dim))
-
         # get prev_action from s-th step to the end, and then pad s steps with zeros
         prev_action_slice = prev_action[:, s:, :]  # get prev_action from s-th step to the end
         # jax.debug.print("prev_action_slice shape: {prev_action_slice_shape}", prev_action_slice_shape=prev_action_slice.shape)
@@ -343,13 +338,8 @@ class Pi0(_model.BaseModel):
             return jnp.stack([d] * 1, axis=0)
 
         # create W
-        diag_w = make_w(d, s)
-
-        # first fill KV cache with a forward pass of the prefix
-        prefix_tokens, prefix_mask, prefix_ar_mask = self.embed_prefix(observation)
-        prefix_attn_mask = make_attn_mask(prefix_mask, prefix_ar_mask)
-        positions = jnp.cumsum(prefix_mask, axis=1) - 1
-        _, kv_cache = self.PaliGemma.llm([prefix_tokens, None], mask=prefix_attn_mask, positions=positions)
+        # TODO: optimize
+        diag_w = jnp.stack([make_w(d_i, s_i) for d_i, s_i in zip(d, s, strict=True)], axis=0)
 
         def func_a_1_prime(x_t, time):
             suffix_tokens, suffix_mask, suffix_ar_mask, adarms_cond = self.embed_suffix(
@@ -411,10 +401,8 @@ class Pi0(_model.BaseModel):
 
         return x_0
 
-    def save_data(self) -> None:
-        with open("save_data/output_actions_float32_save.pkl", "wb") as f:
-            pickle.dump(self.output_actions_save, f)
-
+    # TODO: make a version without jax.block_until_ready
+    # TODO: maybe separate methods for RTC and non-RTC?
     @override
     def sample_actions(
         self,
@@ -423,6 +411,11 @@ class Pi0(_model.BaseModel):
         *,
         num_steps: int = 10,
         noise: at.Float[at.Array, "b ah ad"] | None = None,
+        use_rtc: bool = False,
+        prev_action: _model.Actions | None = None,
+        s: at.Int[at.Array, " b"] | None = None,
+        d: at.Int[at.Array, " b"] | None = None,
+        **kwargs,
     ) -> tuple[_model.Actions, dict[str, float]]:
         times = {}
         start = time.monotonic()
@@ -446,6 +439,7 @@ class Pi0(_model.BaseModel):
         batch_size = observation.state.shape[0]
         if noise is None:
             noise = jax.random.normal(rng, (batch_size, self.action_horizon, self.action_dim))
+        assert noise is not None
         noise = jax.block_until_ready(noise)
         times["overhead"] = time.monotonic() - start
 
@@ -455,15 +449,23 @@ class Pi0(_model.BaseModel):
         times["prefill"] = time.monotonic() - start
 
         start = time.monotonic()
-        x_0 = self.flow_matching(
-            observation,
-            noise,
-            kv_cache,
-            dt,
-            prefix_tokens,
-            prefix_mask,
-        )
-        x_0 = jax.block_until_ready(x_0)
+        if use_rtc:
+            x_0 = self.guided_flow_matching(
+                observation, noise, kv_cache, dt, prefix_tokens, prefix_mask, prev_action, s, d
+            )
+        else:
+            x_0 = self.flow_matching(
+                observation,
+                noise,
+                kv_cache,
+                dt,
+                prefix_tokens,
+                prefix_mask,
+            )
+            x_0 = jax.block_until_ready(x_0)
         times["flow_matching"] = time.monotonic() - start
 
         return x_0, times
+
+    def make_example_actions(self) -> _model.Actions:
+        return jnp.zeros((self.action_horizon, self.action_dim))
