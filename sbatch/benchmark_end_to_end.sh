@@ -60,11 +60,6 @@ echo "Server launched (PID $SERVER_JOB_PID). Waiting for it to initialize..."
 
 # --- Step 2: Run the client on the second node ---
 for ACTION_BROKER_TYPE in ${BROKER_TYPES[@]}; do
-    if [ "$ACTION_BROKER_TYPE" = "RTC" ] && [ "$BATCH_SIZE" -ne 1 ]; then
-        "Skipping RTC for batch size $BATCH_SIZE"
-        continue
-    fi
-
     echo "Running with action broker type: $ACTION_BROKER_TYPE"
     if [ "$ACTION_BROKER_TYPE" = "RTC" ]; then
         ACTION_CHUNK_BROKER_FLAGS="--action-chunk-broker.broker-type RTC --action-chunk-broker.s-min $RTC_S_MIN --action-chunk-broker.d-init $RTC_D_INIT"
