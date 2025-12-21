@@ -71,6 +71,7 @@ class Runtime:
             last_step_time = time.perf_counter()
 
         logging.info("Episode completed.")
+        self._agent.reset()
         for subscriber in self._subscribers:
             subscriber.on_episode_end()
 

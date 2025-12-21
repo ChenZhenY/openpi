@@ -78,12 +78,16 @@ DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
         dir="gs://openpi-assets/checkpoints/pi05_droid",
     ),
     EnvMode.LIBERO: Checkpoint(
-        config="pi05_libero",
-        dir="gs://openpi-assets/checkpoints/pi05_libero",
+        config="pi0_libero",
+        dir="gs://openpi-assets/checkpoints/pi0_libero",
+    ),
+    EnvMode.LIBERO_PYTORCH: Checkpoint(
+        config="pi0_libero",
+        dir="/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/.cache/openpi/openpi-assets/checkpoints/pi0_libero_pytorch_openpi",
     ),
     EnvMode.LIBERO_REALTIME: Checkpoint(
         config="pi0_libero",
-        dir=".cache/openpi/openpi-assets/checkpoints/pi0_libero_pytorch_dexmal",
+        dir="/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/.cache/openpi/openpi-assets/checkpoints/pi0_libero_pytorch_dexmal_mokapots",
     ),
 }
 
@@ -115,6 +119,7 @@ def create_policy(args: Args) -> _policy.Policy:
                 use_triton_optimized=(args.env == EnvMode.LIBERO_REALTIME),
             )
         case Default():
+            print(type(args.policy))
             return create_default_policy(
                 args.env, default_prompt=args.default_prompt, sample_kwargs={"num_steps": args.num_steps}
             )

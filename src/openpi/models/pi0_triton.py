@@ -2,6 +2,9 @@
 
 import pickle
 
+import os
+import pathlib
+import time
 import torch
 from typing_extensions import override
 
@@ -9,7 +12,7 @@ from openpi.models import model as _model
 from openpi.models import pi0_config
 import openpi.models_pytorch.preprocessing_pytorch as _preprocessing
 from openpi.shared import array_typing as at
-from openpi.shared.pi0_infer import Pi0Inference
+from openpi.shared.pi0_infer_single_batch import Pi0Inference
 
 
 class Pi0Triton(_model.BaseModel):
@@ -83,15 +86,16 @@ class Pi0Triton(_model.BaseModel):
         Falls back to standard sample_actions.
         """
         # For now, just call sample_actions and ignore prev_action
-        # You could implement RTC (Receding Time Control) here if needed
         return self.sample_actions(rng, observation, **kwargs)
 
     def _preprocess_observation(self, observation, *, train=True):
         """Helper method to preprocess observation."""
         observation = _preprocessing.preprocess_observation_pytorch(observation, train=train)
         return (
-            list(observation.images.values()),
-            list(observation.image_masks.values()),
+            # list(observation.images.values()),
+            # list(observation.image_masks.values()),
+            observation.images,
+            observation.image_masks,
             observation.tokenized_prompt,
             observation.tokenized_prompt_mask,
             observation.state,
@@ -115,26 +119,40 @@ class Pi0Triton(_model.BaseModel):
         Triton kernels are optimized for single-sample inference.
         """
 
+        times = {}
+        start = time.monotonic()
+
         # Preprocess observation (same as Pi0.sample_actions line 225)
         bsize = observation.state.shape[0]
         if noise is None:
             actions_shape = (bsize, self.config.action_horizon, self.config.action_dim)
             noise = self.sample_noise(actions_shape, device)
+        # print(len(observation.images), observation.images[0].shape, observation.images[0].dtype, observation.images[0].min().item(), observation.images[0].max().item())
 
         images, img_masks, lang_tokens, lang_masks, state = self._preprocess_observation(observation, train=False)
-        images = images[: self.num_views]
+
+        view_keys = ("base_0_rgb", "left_wrist_0_rgb")
+
+        views_bhwc = []
+        for k in view_keys:
+            img = images[k]
+            img = img.permute(0, 2, 3, 1)  # BCHW -> BHWC
+            # img = ((img + 1.0) / 2.0 * 255.0).clip(0, 255)
+
+
+            views_bhwc.append(img)
+
+        images_bvhwc = torch.stack(views_bhwc, dim=1)  # [B, V, H, W, C]
+
+
+        times["preprocess"] = time.monotonic() - start
 
         # Process each batch item
         batch_actions = []
         for batch_idx in range(bsize):
-            # Extract and convert images for this batch item
-            images_converted = []
-            for img in images:
-                img_sample = img[batch_idx]
-                img_sample = img_sample.permute(1, 2, 0)  # Convert to (H, W, C)
-                images_converted.append(img_sample)
 
-            images_stacked = torch.stack(images_converted, dim=0)  # (num_views, H, W, C)
+            # [V, H, W, C]
+            images_stacked = images_bvhwc[batch_idx]
             images_bf16 = images_stacked.to(dtype=torch.bfloat16, device="cuda")
 
             state_bf16 = state[batch_idx].to(dtype=torch.bfloat16, device="cuda")
@@ -146,7 +164,7 @@ class Pi0Triton(_model.BaseModel):
             batch_actions.append(output_actions)
 
         # Stack all batch results: (batch_size, action_horizon, action_dim)
-        return torch.stack(batch_actions, dim=0).to(dtype=torch.float32)
+        return torch.stack(batch_actions, dim=0).to(dtype=torch.float32), times
 
     @classmethod
     def from_converted_checkpoint(cls, config: pi0_config.Pi0Config, checkpoint_path: str, num_views: int = 2):

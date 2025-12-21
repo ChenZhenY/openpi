@@ -32,6 +32,7 @@ class EnvMode(enum.Enum):
     ALOHA_SIM = "aloha_sim"
     DROID = "droid"
     LIBERO = "libero"
+    LIBERO_PYTORCH = "libero_pytorch"
     LIBERO_REALTIME = "libero_realtime"
 
 
@@ -316,7 +317,7 @@ class Policy(BasePolicy):
             return make_aloha_example()
         if env == EnvMode.DROID:
             return make_droid_example()
-        if env in [EnvMode.LIBERO, EnvMode.LIBERO_REALTIME]:
+        if env in [EnvMode.LIBERO, EnvMode.LIBERO_REALTIME, EnvMode.LIBERO_PYTORCH]:
             return make_libero_example()
 
         raise ValueError(f"Unknown environment: {env}")

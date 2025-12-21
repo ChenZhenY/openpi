@@ -73,7 +73,7 @@ class Args:
     #################################################################################################################
     # LIBERO environment-specific parameters
     #################################################################################################################
-    task_suite_name: str = "libero_spatial"
+    task_suite_name: str = "libero_10"
     num_steps_wait: int = 10  # Number of steps to wait for objects to stabilize in sim
     num_trials_per_robot: int = 10  # Number of rollouts per robot per task
     max_steps: int = 300  # Maximum number of control steps per episode
@@ -249,6 +249,8 @@ def create_jobs(args: Args) -> List[Job]:
     jobs: List[Job] = []
     for task_id in range(num_tasks_in_suite):
         task = task_suite.get_task(task_id)
+        if task_id != 8:
+            continue
         all_initial_states = task_suite.get_task_init_states(task_id)
 
         if len(all_initial_states) < args.num_trials_per_robot:
