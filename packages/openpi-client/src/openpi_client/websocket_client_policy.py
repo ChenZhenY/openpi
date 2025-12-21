@@ -5,12 +5,14 @@ import time
 from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
+from dataclasses import asdict
 from typing_extensions import override
 import websockets.sync.client
 import websockets.asyncio.client
 
 from openpi_client import base_policy as _base_policy
 from openpi_client import msgpack_numpy
+from openpi_client import messages
 
 
 class WebsocketClientPolicy(_base_policy.BasePolicy):
@@ -28,7 +30,8 @@ class WebsocketClientPolicy(_base_policy.BasePolicy):
         self._ws_lock = threading.Lock()  # Thread-safe WebSocket access
         self._ws, self._server_metadata = self._wait_for_server()
 
-    def get_server_metadata(self) -> Dict:
+    @property
+    def server_metadata(self) -> Dict:
         return self._server_metadata
 
     def _wait_for_server(self) -> Tuple[websockets.sync.client.ClientConnection, Dict]:
@@ -49,19 +52,18 @@ class WebsocketClientPolicy(_base_policy.BasePolicy):
     def infer(
         self,
         obs: Dict,
+        use_rtc: bool = False,
         prev_action: Optional[np.ndarray] = None,
-        use_rtc: bool = True,
-        s_param: int = 5,
-        d_param: int = 4,
+        s_param: Optional[int] = None,
+        d_param: Optional[int] = None,
     ) -> Dict:  # noqa: UP006
-        data = {
-            "observation": obs,
-            "prev_action": prev_action,
-            "use_rtc": use_rtc,
-            "s_param": s_param,
-            "d_param": d_param,
-        }
-        data = self._packer.pack(data)
+        infer_type = messages.InferType.SYNC
+        params = None
+        if use_rtc:
+            infer_type = messages.InferType.INFERENCE_TIME_RTC
+            params = messages.RTCParams(prev_action=prev_action, s_param=s_param, d_param=d_param)  # type: ignore
+        request = messages.InferRequest(observation=obs, infer_type=infer_type, params=params)
+        data = msgpack_numpy.packb(asdict(request))
 
         # Use lock to ensure thread-safe WebSocket communication
         with self._ws_lock:
@@ -73,35 +75,8 @@ class WebsocketClientPolicy(_base_policy.BasePolicy):
             raise RuntimeError(f"Error in inference server:\n{response}")
         return msgpack_numpy.unpackb(response)
 
-    @override
-    def reset(self) -> None:
-        pass
 
-    def save_data(self) -> None:
-        """Request the server to save collected data."""
-        data = {"command": "save_data"}
-        data = self._packer.pack(data)
-
-        # Use lock to ensure thread-safe WebSocket communication
-        with self._ws_lock:
-            self._ws.send(data)
-            response = self._ws.recv()
-
-        if isinstance(response, str):
-            # Check if it's an error message
-            if response.startswith("Error"):
-                raise RuntimeError(f"Error in inference server:\n{response}")
-            # Otherwise it's a success message
-            logging.info(response)
-        else:
-            # Binary response - unpack it
-            result = msgpack_numpy.unpackb(response)
-            if "status" in result:
-                logging.info(f"Save data status: {result['status']}")
-            if "message" in result:
-                logging.info(result["message"])
-
-
+# TODO: handle infer request packing
 class AsyncWebsocketClientPolicy:
     """Async version of WebsocketClientPolicy for high-performance concurrent requests.
 
@@ -178,7 +153,7 @@ class AsyncWebsocketClientPolicy:
 
         conn = await self._get_connection()
         try:
-            data = self._packer.pack(obs)
+            data = msgpack_numpy.packb(obs)
             await conn.send(data)
             response = await conn.recv()
             if isinstance(response, str):

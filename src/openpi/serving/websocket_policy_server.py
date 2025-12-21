@@ -8,6 +8,9 @@ from typing import Any
 import uuid
 
 from openpi_client import msgpack_numpy
+from openpi_client.messages import InferRequest
+from openpi_client.messages import InferType
+from openpi_client.messages import RTCParams
 import websockets.asyncio.server as _server
 import websockets.frames
 import zmq
@@ -29,17 +32,12 @@ class WebsocketPolicyServer:
         port: int | None = None,
         metadata: dict | None = None,
         batch_size: int = 1,
-        batch_timeout_ms: int = 0,
     ) -> None:
         self._policy_factory = policy_factory
         self._host = host
         self._port = port
         self._metadata = metadata or {}
         self._batch_size = batch_size
-        # Maximum time (in ms) to wait after the first request in a batch
-        # for additional requests before running inference. A value of 0
-        # disables waiting and processes whatever is available immediately.
-        self._batch_timeout_ms = batch_timeout_ms
 
         # Create unique IPC endpoint for ZeroMQ ROUTER/DEALER socket
         socket_id = uuid.uuid4().hex[:8]
@@ -47,7 +45,7 @@ class WebsocketPolicyServer:
 
         self._worker = mp.Process(
             target=self.worker,
-            args=(self._endpoint, self._batch_size, self._batch_timeout_ms),
+            args=(self._endpoint, self._batch_size),
         )
         self.responses = dict[int, asyncio.futures.Future]()
         self._worker_identity: bytes | None = None  # Worker identity (learned from first message)
@@ -133,7 +131,7 @@ class WebsocketPolicyServer:
             except Exception as e:
                 logger.error(f"Error processing response: {e}", exc_info=True)
 
-    def worker(self, endpoint: str, batch_size: int, batch_timeout_ms: int):
+    def worker(self, endpoint: str, batch_size: int):
         """Worker process that uses DEALER socket to communicate with ROUTER.
 
         DEALER automatically handles identity frames - it strips identity when receiving
@@ -162,9 +160,6 @@ class WebsocketPolicyServer:
         poller.register(socket, zmq.POLLIN)
 
         try:
-            # Create dummy observation for padding (reused across batches)
-            dummy_obs = self._policy.make_example()
-
             while True:
                 request_ids = []
                 batch = []
@@ -177,11 +172,9 @@ class WebsocketPolicyServer:
                 request_ids.append(request_id)
                 batch.append(obs)
 
-                # Collect additional messages up to batch_size, waiting up to batch_timeout_ms
-                # after the first request. A timeout of 0 means "do not wait" and only grab
-                # requests that are already queued.
+                # Collect additional messages up to batch_size.
                 while len(batch) < batch_size:
-                    socks = dict(poller.poll(timeout=batch_timeout_ms))
+                    socks = dict(poller.poll(timeout=0))
                     if socket in socks and socks[socket] == zmq.POLLIN:
                         # DEALER receives messages without identity frame
                         request_id, obs = socket.recv_pyobj()
@@ -193,9 +186,14 @@ class WebsocketPolicyServer:
 
                 if batch:
                     num_real = len(batch)
-                    # Pad batch to batch_size with dummy observations to avoid JIT recompilation
+                    # Pad batch to batch_size with to avoid JIT recompilation
                     while len(batch) < batch_size:
-                        batch.append(dummy_obs)
+                        batch.append(batch[-1])
+
+                    # TODO: can we support multiple infer_types in the same batch?
+                    assert len({request.infer_type for request in batch}) == 1, (
+                        "All requests must have the same infer_type"
+                    )
 
                     logger.info(f"Inferring batch of size {batch_size} (padded from {num_real} real requests)")
                     actions = self._policy.infer_batch(batch)
@@ -217,7 +215,8 @@ class WebsocketPolicyServer:
 
         while True:
             try:
-                obs = msgpack_numpy.unpackb(await websocket.recv())
+                message = msgpack_numpy.unpackb(await websocket.recv())
+                request = InferRequest(**message)
 
                 request_id = self.last_request_id + 1
                 self.last_request_id = request_id
@@ -229,7 +228,7 @@ class WebsocketPolicyServer:
 
                 # ROUTER sends: identity frame + message frame
                 await self._socket.send(self._worker_identity, zmq.SNDMORE)
-                await self._socket.send_pyobj((request_id, obs))
+                await self._socket.send_pyobj((request_id, request))
                 logger.info(f"Sent request {request_id} via ZeroMQ")
 
                 action = await self.responses[request_id]
@@ -255,10 +254,25 @@ class WebsocketPolicyServer:
         logger.info("Warming up policy...")
         observation = self._policy.make_example()
 
-        # Warm up with full batch_size (we always pad to this size)
-        logger.info(f"Warming up batch size {batch_size}")
-        batch = [observation] * batch_size
-        self._policy.infer_batch(batch)
+        requests = []
+
+        requests.append(InferRequest(observation=observation, infer_type=InferType.SYNC, params=None))
+        requests.append(
+            InferRequest(
+                observation=observation,
+                infer_type=InferType.INFERENCE_TIME_RTC,
+                params=RTCParams(
+                    prev_action=self._policy.make_example_actions(),
+                    s_param=5,
+                    d_param=3,
+                ),
+            )
+        )
+        for request in requests:
+            logger.info(f"Warming up {request.infer_type} for batch_size={batch_size}")
+            # Warm up with full batch_size (we always pad to this size)
+            batch = [request] * batch_size
+            self._policy.infer_batch(batch)
 
 
 def _health_check(connection: _server.ServerConnection, request: Any) -> Any | None:
