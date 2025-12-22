@@ -374,9 +374,17 @@ class PI0Pytorch(nn.Module):
         return F.mse_loss(u_t, v_t, reduction="none")
 
     @torch.no_grad()
-    def sample_actions(self, device, observation, noise=None, num_steps=10) -> Tensor:
+    def sample_actions(self, device, observation, noise=None, num_steps=10, return_debug_data=False) -> tuple[Tensor, dict, dict | None]:
         """Do a full inference forward and compute the action (batch_size x num_steps x num_motors)"""
         times = {}
+        debug_data = {} if return_debug_data else None
+
+        if return_debug_data:
+            debug_data["obs_before_preprocess"] = {
+                "images": {k: v.cpu().numpy() for k, v in observation.images.items()},
+                "state": observation.state.cpu().numpy(),
+            }
+
         start = time_module.monotonic()
         
         bsize = observation.state.shape[0]
@@ -386,6 +394,13 @@ class PI0Pytorch(nn.Module):
 
         images, img_masks, lang_tokens, lang_masks, state = self._preprocess_observation(observation, train=False)
         times["preprocess"] = time_module.monotonic() - start
+
+        if return_debug_data:
+            debug_data["obs_after_preprocess"] = {
+                "images": {f"image_{i}": img.cpu().numpy() for i, img in enumerate(images)},
+                "state": state.cpu().numpy(),
+            }
+            debug_data["noise"] = noise.cpu().numpy()
 
         start = time_module.monotonic()
         prefix_embs, prefix_pad_masks, prefix_att_masks = self.embed_prefix(images, img_masks, lang_tokens, lang_masks)
@@ -431,7 +446,10 @@ class PI0Pytorch(nn.Module):
             time += dt
         times["flow_matching"] = time_module.monotonic() - start
 
-        return x_t, times
+        if return_debug_data:
+            debug_data["output_actions"] = x_t.cpu().numpy()
+
+        return x_t, times, debug_data
 
     def denoise_step(
         self,

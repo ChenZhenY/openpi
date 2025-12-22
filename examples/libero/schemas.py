@@ -139,6 +139,7 @@ class ActionChunk(ParquetDataclass, CSVDataclass):
     response_timestamp: float
     start_step: int = field(default_factory=lambda: -1)
     actions: np.ndarray = field(default_factory=lambda: np.array([]))
+    debug_data: dict = field(default_factory=dict)  # optional, from model inference
 
     def set_start_step(self, start_step: int) -> None:
         self.start_step = start_step

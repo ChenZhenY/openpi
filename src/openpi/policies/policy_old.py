@@ -11,8 +11,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from openpi_client import base_policy as _base_policy
-from openpi_client.messages import InferRequest
-from openpi_client.messages import InferResponse
+from openpi_client import messages as _messages
 import torch
 from typing_extensions import override
 
@@ -73,17 +72,16 @@ class Policy(BasePolicy):
         self._pytorch_device = pytorch_device
 
         if self._is_pytorch_model:
-            assert isinstance(self._model, torch.nn.Module), "Model must be a PyTorch model"
             self._model = self._model.to(pytorch_device)
             self._model.eval()
         else:
             # JAX model setup
-            # TODO: compile everything
+
             self._rng = rng or jax.random.key(0)
             self._model.embed_prefix = nnx_utils.module_jit(self._model.embed_prefix)
             self._model.prefill = nnx_utils.module_jit(self._model.prefill)
             self._model.flow_matching = nnx_utils.module_jit(self._model.flow_matching)
-            self._model.guided_flow_matching = nnx_utils.module_jit(model.guided_flow_matching)
+            self._guided_inference = nnx_utils.module_jit(model.guided_flow_matching)
         self._sample_actions = model.sample_actions
 
     @override
@@ -120,6 +118,10 @@ class Policy(BasePolicy):
 
         # Prepare kwargs for sample_actions
         sample_kwargs = dict(self._sample_kwargs)
+        # TODO: Only pass RTC parameters (s, d) to JAX, PyTorch doesn't support yet
+        if not self._is_pytorch_model:
+            sample_kwargs["s"] = s_param
+            sample_kwargs["d"] = d_param
         sample_kwargs["return_debug_data"] = return_debug_data
         if noise is not None:
             noise = torch.from_numpy(noise).to(self._pytorch_device) if self._is_pytorch_model else jnp.asarray(noise)
@@ -133,19 +135,44 @@ class Policy(BasePolicy):
         times: dict[str, float] = {}
         debug_data: dict | None = None
 
-        actions, times, debug_data = self._sample_actions(
-            sample_rng_or_pytorch_device,
-            observation,
-            prev_action=prev_action,
-            use_rtc=use_rtc,
-            s=s_param,
-            d=d_param,
-            **sample_kwargs,
-        )
-        outputs = {
-            "state": observation.state,
-            "actions": actions,
-        }
+        if use_rtc:
+            if prev_action is None:
+                # First RTC call: fall back to normal sampling (but with RTC parameters).
+                origin_actions, times, debug_data = self._sample_actions(
+                    sample_rng_or_pytorch_device,
+                    observation,
+                    **self._sample_kwargs,
+                )
+            else:
+                # Subsequent RTC call: use guided_inference. This API returns only actions,
+                # so we construct a simple timing dict here.
+                prev_action = jnp.asarray(prev_action)[np.newaxis, ...]  # Add batch dimension
+                guided_start = time.monotonic()
+                origin_actions = self._guided_inference(
+                    sample_rng_or_pytorch_device,
+                    prev_action,
+                    observation,
+                    **self._sample_kwargs,
+                )
+                times["guided_inference"] = time.monotonic() - guided_start
+
+            outputs = {
+                "state": inputs["state"],
+                "actions": origin_actions,
+                "origin_actions": origin_actions,
+            }
+        else:
+            # Non-RTC path: standard sampling with full sample_kwargs (including s/d/noise).
+            origin_actions, times, debug_data = self._sample_actions(
+                sample_rng_or_pytorch_device,
+                observation,
+                **sample_kwargs,
+            )
+            outputs = {
+                "state": inputs["state"],
+                "actions": origin_actions,
+                "origin_actions": origin_actions,
+            }
 
         # Ensure we always record a total inference time.
         times.setdefault("infer_total", time.monotonic() - start_time)
@@ -161,7 +188,7 @@ class Policy(BasePolicy):
 
         outputs = self._output_transform(outputs)
         outputs["policy_timing"] = times
-
+        
         # Add debug data if requested
         if debug_data is not None:
             # Convert JAX arrays to numpy for serialization
@@ -172,101 +199,155 @@ class Policy(BasePolicy):
                     return np.asarray(x)
                 return x
             debug_data_numpy = jax.tree.map(to_numpy, debug_data)
-            # save the final post-processed actions (after unnormalization)
+            # Also save the final post-processed actions (after unnormalization)
+            # These are the actual actions sent to the robot
             debug_data_numpy["final_actions"] = outputs["actions"]
-            # save the raw observation (before any transforms) for det replay
+            # Save the raw observation (before any transforms) for exact replay
             if raw_obs is not None:
                 debug_data_numpy["raw_obs"] = raw_obs
             outputs["debug_data"] = debug_data_numpy
-
+        
         return outputs
 
-    def create_batch_obs(self, observations: list[dict]) -> _model.Observation:
+    def infer_batch(self, obs_batch: list[dict | _messages.InferRequest], *, noise: np.ndarray | None = None, return_debug_data: bool = False) -> list[dict]:
+        """Run inference on a batch of observations.
+
+        This supports three input formats:
+        1. Raw observation dicts expected by the model.
+        2. Websocket envelopes containing:
+           {"observation": obs, "prev_action": ..., "use_rtc": ..., "s_param": ..., "d_param": ...}
+        3. InferRequest dataclass objects from the websocket server.
+
+        In case (2) and (3) we delegate to `infer` per-example so that RTC / guided_inference
+        behavior matches the single-sample path.
+
+        Args:
+            obs_batch: List of observation dictionaries, websocket-style envelopes, or InferRequest objects.
+            noise: Optional noise tensor for batch (shape: batch_size, action_horizon, action_dim)
+            return_debug_data: Whether to return debug data (obs before/after preprocessing, noise, output)
+
+        Returns:
+            List of result dictionaries, one for each input observation.
+        """
+        if not obs_batch:
+            return []
+
+        # Check if inputs are InferRequest dataclass objects
+        has_infer_request = any(isinstance(obs, _messages.InferRequest) for obs in obs_batch)
+        
+        if has_infer_request:
+            results: list[dict] = []
+            for req in obs_batch:
+                if isinstance(req, _messages.InferRequest):
+                    inner_obs = req.observation
+                    use_rtc = req.infer_type == _messages.InferType.INFERENCE_TIME_RTC
+                    prev_action = None
+                    s_param = 5
+                    d_param = 4
+                    if req.params is not None and isinstance(req.params, _messages.RTCParams):
+                        prev_action = req.params.prev_action
+                        s_param = req.params.s_param
+                        d_param = req.params.d_param
+                    req_debug_data = req.return_debug_data
+                    req_noise = req.noise
+                    res = self.infer(
+                        inner_obs,
+                        prev_action=prev_action,
+                        use_rtc=use_rtc,
+                        noise=req_noise,
+                        s_param=s_param,
+                        d_param=d_param,
+                        return_debug_data=req_debug_data,
+                    )
+                else:
+                    # Fallback for mixed batches (shouldn't happen normally)
+                    res = self.infer(req, return_debug_data=return_debug_data)
+                results.append(res)
+            return results
+
+        # If inputs look like websocket envelopes (with prev_action / use_rtc / s_param / d_param),
+        # use the per-example infer() path so that guided_inference and RTC semantics are respected.
+        envelope_keys = {"observation", "prev_action", "use_rtc", "s_param", "d_param", "return_debug_data"}
+        has_envelope_like = any(isinstance(obs, dict) and any(k in obs for k in envelope_keys) for obs in obs_batch)
+
+        if has_envelope_like:
+            results: list[dict] = []
+            for obs in obs_batch:
+                # Handle both pure observation dicts and websocket-style envelopes.
+                if isinstance(obs, dict) and "observation" in obs:
+                    inner_obs = obs["observation"]
+                    prev_action = obs.get("prev_action", None)
+                    use_rtc = obs.get("use_rtc", False)
+                    s_param = obs.get("s_param", 5)
+                    d_param = obs.get("d_param", 4)
+                    req_debug_data = obs.get("return_debug_data", return_debug_data)
+                    res = self.infer(
+                        inner_obs,
+                        prev_action=prev_action,
+                        use_rtc=use_rtc,
+                        noise=None,
+                        s_param=s_param,
+                        d_param=d_param,
+                        return_debug_data=req_debug_data,
+                    )
+                else:
+                    # Fallback: treat as raw observation dict with default non-RTC settings.
+                    res = self.infer(obs, return_debug_data=return_debug_data)
+                results.append(res)
+            return results
+
+        # Fast batched path for plain observation dicts (non-RTC).
+        first_obs = obs_batch[0]
+        batch_size = len(obs_batch)
+
         # Stack observations into batch format
         batched_obs = {}
-
-        # FIXME: don't hardcode these values
-        keys = ("observation/state", "observation/image", "observation/wrist_image", "prompt")
-        for key in keys:
-            # Stack all values for this key
-            values = [obs[key] for obs in observations]
-            if isinstance(values[0], np.ndarray):
-                batched_obs[key] = np.stack(values, axis=0)
-            elif isinstance(values[0], dict):
-                # Handle nested dictionaries (like images)
-                batched_obs[key] = {}
-                for subkey in values[0]:
-                    subvalues = [obs[key][subkey] for obs in observations]
-                    if isinstance(subvalues[0], np.ndarray):
-                        batched_obs[key][subkey] = np.stack(subvalues, axis=0)
-                    else:
-                        batched_obs[key][subkey] = subvalues
+        for key in first_obs:
+            if key in first_obs:
+                # Stack all values for this key
+                values = [obs[key] for obs in obs_batch]
+                if isinstance(values[0], np.ndarray):
+                    batched_obs[key] = np.stack(values, axis=0)
+                elif isinstance(values[0], dict):
+                    # Handle nested dictionaries (like images)
+                    batched_obs[key] = {}
+                    for subkey in values[0]:
+                        subvalues = [obs[key][subkey] for obs in obs_batch]
+                        if isinstance(subvalues[0], np.ndarray):
+                            batched_obs[key][subkey] = np.stack(subvalues, axis=0)
+                        else:
+                            batched_obs[key][subkey] = subvalues
+                else:
+                    batched_obs[key] = values
             else:
-                batched_obs[key] = values
+                batched_obs[key] = [obs.get(key, None) for obs in obs_batch]
 
-        # Make a copy since transformations may modify the inputs in place.
-        inputs = jax.tree.map(lambda x: x, batched_obs)
         # Apply transforms to batched observation
+        inputs = jax.tree.map(lambda x: x, batched_obs)
         inputs = self._input_transform(inputs)
 
         if not self._is_pytorch_model:
             # Convert to jax.Array (already batched)
             inputs = jax.tree.map(lambda x: jnp.asarray(x), inputs)
+            self._rng, sample_rng_or_pytorch_device = jax.random.split(self._rng)
         else:
             # Convert inputs to PyTorch tensors and move to correct device
             inputs = jax.tree.map(lambda x: torch.from_numpy(np.array(x)).to(self._pytorch_device), inputs)
+            sample_rng_or_pytorch_device = self._pytorch_device
 
-        return _model.Observation.from_dict(inputs)
-
-    def infer_batch(self, requests: list[InferRequest], *, noise: np.ndarray | None = None, return_debug_data: bool = False) -> list[InferResponse]:
-        """Run inference on a batch of request.
-
-        Args:
-            obs_batch: List of InferRequest objects of the same infer_type.
-            noise: Optional noise tensor for batch (shape: batch_size, action_horizon, action_dim)
-            return_debug_data: Whether to return debug data (obs before/after preprocessing, noise, output)
-
-        Returns:
-            List of InferResponse objects, one for each input request.
-        """
-        if not requests:
-            return []
-
-        # Check if any request wants debug data (use per-request flag if available)
-        any_debug_data = return_debug_data or any(
-            getattr(req, 'return_debug_data', False) for req in requests
-        )
-
-        # Capture raw observations before any transforms (for deterministic replay)
-        raw_obs_list = None
-        if any_debug_data:
-            raw_obs_list = [
-                jax.tree.map(lambda x: np.array(x) if hasattr(x, '__array__') else x, req.observation)
-                for req in requests
-            ]
-
-        # Fast batched path for plain observation dicts (non-RTC).
-        observation = self.create_batch_obs([request.observation for request in requests])
         # Prepare kwargs for sample_actions
         sample_kwargs = dict(self._sample_kwargs)
-        sample_kwargs["return_debug_data"] = any_debug_data
+        sample_kwargs["return_debug_data"] = return_debug_data
         if noise is not None:
             noise = torch.from_numpy(noise).to(self._pytorch_device) if self._is_pytorch_model else jnp.asarray(noise)
             sample_kwargs["noise"] = noise
 
-        # TODO: separate logic for jax and pytorch?
-        if not self._is_pytorch_model:
-            # Convert to jax.Array (already batched)
-            self._rng, sample_rng_or_pytorch_device = jax.random.split(self._rng)
-        else:
-            # Convert inputs to PyTorch tensors and move to correct device
-            sample_rng_or_pytorch_device = self._pytorch_device
-
+        observation = _model.Observation.from_dict(inputs)
         start_time = time.monotonic()
         actions, times, debug_data = self._sample_actions(sample_rng_or_pytorch_device, observation, **sample_kwargs)
         times["infer_total"] = time.monotonic() - start_time
         outputs = {
-            "state": observation.state,
+            "state": inputs["state"],
             "actions": actions,
         }
 
@@ -280,7 +361,7 @@ class Policy(BasePolicy):
 
         # Split batch results back into individual results
         results = []
-        for i in range(len(requests)):
+        for i in range(batch_size):
             result = {}
             for key, value in outputs.items():
                 if key == "policy_timing":
@@ -289,7 +370,7 @@ class Policy(BasePolicy):
                     result[key] = value[i]
                 else:
                     result[key] = value
-
+            
             # Add debug data for this batch element if available
             if debug_data is not None:
                 def to_numpy(x):
@@ -298,35 +379,26 @@ class Policy(BasePolicy):
                     elif hasattr(x, "__array__"):
                         return np.asarray(x)
                     return x
-
-                # First convert all JAX arrays to numpy recursively
-                debug_data_numpy = jax.tree.map(to_numpy, debug_data)
-
+                
                 # Extract debug data for this batch element
                 result_debug = {}
-                for debug_key, debug_value in debug_data_numpy.items():
+                for debug_key, debug_value in debug_data.items():
                     if isinstance(debug_value, dict):
                         result_debug[debug_key] = {}
                         for subkey, subvalue in debug_value.items():
-                            if isinstance(subvalue, np.ndarray) and len(subvalue.shape) > 0:
-                                result_debug[debug_key][subkey] = subvalue[i]
+                            arr = to_numpy(subvalue)
+                            if isinstance(arr, np.ndarray) and len(arr.shape) > 0:
+                                result_debug[debug_key][subkey] = arr[i]
                             else:
-                                result_debug[debug_key][subkey] = subvalue
+                                result_debug[debug_key][subkey] = arr
                     else:
-                        if isinstance(debug_value, np.ndarray) and len(debug_value.shape) > 0:
-                            result_debug[debug_key] = debug_value[i]
+                        arr = to_numpy(debug_value)
+                        if isinstance(arr, np.ndarray) and len(arr.shape) > 0:
+                            result_debug[debug_key] = arr[i]
                         else:
-                            result_debug[debug_key] = debug_value
-
-                # Add final_actions (post-output-transform) for this batch element
-                result_debug["final_actions"] = result["actions"]
-
-                # Add raw_obs (before any transforms) for this batch element
-                if raw_obs_list is not None:
-                    result_debug["raw_obs"] = raw_obs_list[i]
-
+                            result_debug[debug_key] = arr
                 result["debug_data"] = result_debug
-
+            
             results.append(result)
 
         return results
@@ -346,9 +418,6 @@ class Policy(BasePolicy):
             return make_libero_example()
 
         raise ValueError(f"Unknown environment: {env}")
-
-    def make_example_actions(self) -> np.ndarray:
-        return self._model.make_example_actions()
 
 
 class PolicyRecorder(_base_policy.BasePolicy):

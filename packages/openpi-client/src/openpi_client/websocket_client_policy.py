@@ -56,13 +56,15 @@ class WebsocketClientPolicy(_base_policy.BasePolicy):
         prev_action: Optional[np.ndarray] = None,
         s_param: Optional[int] = None,
         d_param: Optional[int] = None,
+        return_debug_data: bool = False,
+        noise: Optional[np.ndarray] = None,
     ) -> Dict:  # noqa: UP006
         infer_type = messages.InferType.SYNC
         params = None
         if use_rtc:
             infer_type = messages.InferType.INFERENCE_TIME_RTC
             params = messages.RTCParams(prev_action=prev_action, s_param=s_param, d_param=d_param)  # type: ignore
-        request = messages.InferRequest(observation=obs, infer_type=infer_type, params=params)
+        request = messages.InferRequest(observation=obs, infer_type=infer_type, params=params, return_debug_data=return_debug_data, noise=noise)
         data = msgpack_numpy.packb(asdict(request))
 
         # Use lock to ensure thread-safe WebSocket communication
