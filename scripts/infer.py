@@ -1,6 +1,8 @@
 import argparse
 
 import jax
+from openpi_client.messages import InferRequest
+from openpi_client.messages import InferType
 
 from openpi.policies import libero_policy
 from openpi.policies import policy_config
@@ -14,21 +16,22 @@ def main(args):
 
     # Create a trained policy.
     policy = policy_config.create_trained_policy(config, checkpoint_dir, sample_kwargs={"num_steps": args.num_steps})
+
     # Run inference on a dummy example.
     example = libero_policy.make_libero_example()
-    examples = [example] * args.batch_size
+    request = InferRequest(observation=example, infer_type=InferType.SYNC, params=None)
+    requests = [request] * args.batch_size
 
     print("Warming up...")
-    outputs = policy.infer_batch(examples)
+    outputs = policy.infer_batch(requests)
     jax.block_until_ready(outputs)
     print("Warmed up")
 
     print("Inferring...")
-    outputs = policy.infer_batch(examples)
-    jax.block_until_ready(outputs)
-    output = outputs[0]
-    print("actions", output["actions"].shape)
-    print("policy_timing", output["policy_timing"])
+    for _ in range(5):
+        outputs = policy.infer_batch(requests)
+        jax.block_until_ready(outputs)
+    print("Inference complete")
 
 
 if __name__ == "__main__":
