@@ -76,7 +76,6 @@ class WebsocketClientPolicy(_base_policy.BasePolicy):
         return msgpack_numpy.unpackb(response)
 
 
-# TODO: handle infer request packing
 class AsyncWebsocketClientPolicy:
     """Async version of WebsocketClientPolicy for high-performance concurrent requests.
 
@@ -142,7 +141,14 @@ class AsyncWebsocketClientPolicy:
         async with self._pool_lock:
             self._connection_pool.append(conn)
 
-    async def infer(self, obs: Dict) -> Dict:
+    async def infer(
+        self,
+        obs: Dict,
+        use_rtc: bool = False,
+        prev_action: Optional[np.ndarray] = None,
+        s_param: Optional[int] = None,
+        d_param: Optional[int] = None,
+    ) -> Dict:
         """Send an observation and receive an action asynchronously.
 
         Each request uses its own connection from the pool to avoid
@@ -151,9 +157,16 @@ class AsyncWebsocketClientPolicy:
         if self._server_metadata is None:
             raise RuntimeError("Client not connected. Call connect() first.")
 
+        infer_type = messages.InferType.SYNC
+        params = None
+        if use_rtc:
+            infer_type = messages.InferType.INFERENCE_TIME_RTC
+            params = messages.RTCParams(prev_action=prev_action, s_param=s_param, d_param=d_param)  # type: ignore
+        request = messages.InferRequest(observation=obs, infer_type=infer_type, params=params)
+        data = msgpack_numpy.packb(asdict(request))
+
         conn = await self._get_connection()
         try:
-            data = msgpack_numpy.packb(obs)
             await conn.send(data)
             response = await conn.recv()
             if isinstance(response, str):

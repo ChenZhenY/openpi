@@ -1,4 +1,5 @@
 import argparse
+import os
 
 import jax
 from openpi_client.messages import InferRequest
@@ -8,6 +9,8 @@ from openpi.policies import libero_policy
 from openpi.policies import policy_config
 from openpi.shared import download
 from openpi.training import config as _config
+
+os.environ["XLA_FLAGS"] = "--xla_gpu_triton_gemm_any=True --xla_gpu_enable_latency_hiding_scheduler=true "
 
 
 def main(args):
