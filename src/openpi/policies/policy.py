@@ -50,6 +50,7 @@ class Policy(BasePolicy):
         metadata: dict[str, Any] | None = None,
         pytorch_device: str = "cpu",
         is_pytorch: bool = False,
+        is_triton_optimized: bool = False,
     ):
         """Initialize the Policy.
 
@@ -71,9 +72,10 @@ class Policy(BasePolicy):
         self._metadata = metadata or {}
         self._is_pytorch_model = is_pytorch
         self._pytorch_device = pytorch_device
+        self._is_triton_optimized = is_triton_optimized
 
         if self._is_pytorch_model:
-            assert isinstance(self._model, torch.nn.Module), "Model must be a PyTorch model"
+            # assert isinstance(self._model, torch.nn.Module), "Model must be a PyTorch model"
             self._model = self._model.to(pytorch_device)
             self._model.eval()
         else:
@@ -105,85 +107,160 @@ class Policy(BasePolicy):
         
         # Make a copy since transformations may modify the inputs in place.
         inputs = jax.tree.map(lambda x: x, obs)
-        inputs = self._input_transform(inputs)
-        if not self._is_pytorch_model:
-            # Make a batch and convert to jax.Array.
-            inputs = jax.tree.map(lambda x: jnp.asarray(x)[np.newaxis, ...], inputs)
-            self._rng, sample_rng_or_pytorch_device = jax.random.split(self._rng)
-        else:
-            # Convert inputs to PyTorch tensors and move to correct device
-            inputs = jax.tree.map(
-                lambda x: torch.from_numpy(np.array(x)).to(self._pytorch_device)[None, ...],
-                inputs,
-            )
+        if self._is_triton_optimized:
+            # Triton policy expects already-repacked LIBERO dict keys (base_0_rgb, etc) and
+            # applies its own preprocessing/normalization internally.
+            triton_obs: dict[str, Any] = {
+                "state": np.asarray(inputs["observation/state"])[None, ...],
+                "base_0_rgb": np.asarray(inputs["observation/image"])[None, ...],
+                "left_wrist_0_rgb": np.asarray(inputs["observation/wrist_image"])[None, ...],
+                "right_wrist_0_rgb": np.asarray(inputs["observation/wrist_image"])[None, ...],
+                # Keep prompt as object array so downstream tokenization can `.item()` if needed.
+                "prompt": np.asarray([inputs.get("prompt", "")], dtype=object),
+            }
+
+            sample_kwargs = dict(self._sample_kwargs)
+            sample_kwargs["return_debug_data"] = return_debug_data
+            if noise is not None:
+                sample_kwargs["noise"] = np.asarray(noise)
+
             sample_rng_or_pytorch_device = self._pytorch_device
+            actions, times, debug_data = self._sample_actions(sample_rng_or_pytorch_device, triton_obs, **sample_kwargs)
 
-        # Prepare kwargs for sample_actions
-        sample_kwargs = dict(self._sample_kwargs)
-        sample_kwargs["return_debug_data"] = return_debug_data
-        if noise is not None:
-            noise = torch.from_numpy(noise).to(self._pytorch_device) if self._is_pytorch_model else jnp.asarray(noise)
+            actions_np = np.asarray(actions)
+            if actions_np.ndim == 3 and actions_np.shape[0] == 1:
+                actions_np = actions_np[0]
 
-            if noise.ndim == 2:  # If noise is (action_horizon, action_dim), add batch dimension
-                noise = noise[None, ...]  # Make it (1, action_horizon, action_dim)
-            sample_kwargs["noise"] = noise
+            # Build outputs in the same *normalized* space as the JAX model path:
+            # - `actions`: normalized (H, 32) from Triton model
+            # - `state`: normalized (32,) computed from raw state and checkpoint norm stats
+            ns = getattr(self._model, "norm_stats", None)
+            raw_state = np.asarray(inputs["observation/state"], dtype=np.float32)
+            state_norm = np.pad(raw_state, (0, max(0, 32 - raw_state.shape[-1])), constant_values=0.0)
+            if ns is not None and "state" in ns:
+                mean = np.asarray(ns["state"]["mean"], dtype=np.float32)
+                std = np.asarray(ns["state"]["std"], dtype=np.float32)
+                mean = np.pad(mean, (0, max(0, 32 - mean.shape[-1])), constant_values=0.0)
+                std = np.pad(std, (0, max(0, 32 - std.shape[-1])), constant_values=1.0)
+                state_norm = (state_norm - mean) / (std + 1e-6)
 
-        observation = _model.Observation.from_dict(inputs)
-        start_time = time.monotonic()
-        times: dict[str, float] = {}
-        debug_data: dict | None = None
+            outputs: dict[str, Any] = {"state": state_norm, "actions": actions_np}
 
-        actions, times, debug_data = self._sample_actions(
-            sample_rng_or_pytorch_device,
-            observation,
-            prev_action=prev_action,
-            use_rtc=use_rtc,
-            s=s_param,
-            d=d_param,
-            **sample_kwargs,
-        )
-        outputs = {
-            "state": observation.state,
-            "actions": actions,
-        }
+            # Apply the full output transform (including Unnormalize) to match the JAX policy.
+            outputs = self._output_transform(outputs)
+            outputs["policy_timing"] = times
+            if return_debug_data:
+                # Build a minimal debug payload that lets us compare Triton vs saved JAX runs.
+                # Note: for Triton, the model may not populate a rich debug dict; we always include
+                # the raw model output (`output_actions`) plus the final post-processed actions.
+                def to_numpy(x):
+                    if hasattr(x, "numpy"):
+                        return x.numpy()
+                    elif hasattr(x, "__array__"):
+                        return np.asarray(x)
+                    return x
 
-        # Ensure we always record a total inference time.
-        times.setdefault("infer_total", time.monotonic() - start_time)
-
-        # Collect data for JAX models (after JIT execution)
-        if not self._is_pytorch_model and hasattr(self._model, "output_actions_save"):
-            self._model.output_actions_save.append(origin_actions)
-
-        if self._is_pytorch_model:
-            outputs = jax.tree.map(lambda x: np.asarray(x[0, ...].detach().cpu()), outputs)
+                debug_data_numpy: dict[str, Any] = {}
+                if debug_data is not None:
+                    debug_data_numpy = jax.tree.map(to_numpy, debug_data)
+                debug_data_numpy["output_actions"] = np.asarray(actions_np)
+                if noise is not None:
+                    debug_data_numpy["noise"] = np.asarray(noise)
+                debug_data_numpy["final_actions"] = outputs["actions"]
+                if raw_obs is not None:
+                    debug_data_numpy["raw_obs"] = raw_obs
+                outputs["debug_data"] = debug_data_numpy
         else:
-            outputs = jax.tree.map(lambda x: np.asarray(x[0, ...]), outputs)
 
-        outputs = self._output_transform(outputs)
-        outputs["policy_timing"] = times
+            inputs = self._input_transform(inputs)
+            if not self._is_pytorch_model:
+                # Make a batch and convert to jax.Array.
+                inputs = jax.tree.map(lambda x: jnp.asarray(x)[np.newaxis, ...], inputs)
+                self._rng, sample_rng_or_pytorch_device = jax.random.split(self._rng)
+            else:
+                # Convert inputs to PyTorch tensors and move to correct device
+                inputs = jax.tree.map(
+                    lambda x: torch.from_numpy(np.array(x)).to(self._pytorch_device)[None, ...],
+                    inputs,
+                )
+                sample_rng_or_pytorch_device = self._pytorch_device
 
-        # Add debug data if requested
-        if debug_data is not None:
-            # Convert JAX arrays to numpy for serialization
-            def to_numpy(x):
-                if hasattr(x, "numpy"):
-                    return x.numpy()
-                elif hasattr(x, "__array__"):
-                    return np.asarray(x)
-                return x
-            debug_data_numpy = jax.tree.map(to_numpy, debug_data)
-            # save the final post-processed actions (after unnormalization)
-            debug_data_numpy["final_actions"] = outputs["actions"]
-            # save the raw observation (before any transforms) for det replay
-            if raw_obs is not None:
-                debug_data_numpy["raw_obs"] = raw_obs
-            outputs["debug_data"] = debug_data_numpy
+            # Prepare kwargs for sample_actions
+            sample_kwargs = dict(self._sample_kwargs)
+            sample_kwargs["return_debug_data"] = return_debug_data
+            if noise is not None:
+                noise = torch.from_numpy(noise).to(self._pytorch_device) if self._is_pytorch_model else jnp.asarray(noise)
+
+                if noise.ndim == 2:  # If noise is (action_horizon, action_dim), add batch dimension
+                    noise = noise[None, ...]  # Make it (1, action_horizon, action_dim)
+                sample_kwargs["noise"] = noise
+
+            observation = _model.Observation.from_dict(inputs)
+            start_time = time.monotonic()
+            times: dict[str, float] = {}
+            debug_data: dict | None = None
+
+            actions, times, debug_data = self._sample_actions(
+                sample_rng_or_pytorch_device,
+                observation,
+                prev_action=prev_action,
+                use_rtc=use_rtc,
+                s=s_param,
+                d=d_param,
+                **sample_kwargs,
+            )
+            outputs = {
+                "state": observation.state,
+                "actions": actions,
+            }
+
+            # Ensure we always record a total inference time.
+            times.setdefault("infer_total", time.monotonic() - start_time)
+
+            # Collect data for JAX models (after JIT execution)
+            if not self._is_pytorch_model and hasattr(self._model, "output_actions_save"):
+                self._model.output_actions_save.append(actions)
+
+            if self._is_pytorch_model:
+                outputs = jax.tree.map(lambda x: np.asarray(x[0, ...].detach().cpu()), outputs)
+            else:
+                outputs = jax.tree.map(lambda x: np.asarray(x[0, ...]), outputs)
+
+            outputs = self._output_transform(outputs)
+            outputs["policy_timing"] = times
+
+            # Add debug data if requested
+            if debug_data is not None:
+                # Convert JAX arrays to numpy for serialization
+                def to_numpy(x):
+                    if hasattr(x, "numpy"):
+                        return x.numpy()
+                    elif hasattr(x, "__array__"):
+                        return np.asarray(x)
+                    return x
+                debug_data_numpy = jax.tree.map(to_numpy, debug_data)
+                # save the final post-processed actions (after unnormalization)
+                debug_data_numpy["final_actions"] = outputs["actions"]
+                # save the raw observation (before any transforms) for det replay
+                if raw_obs is not None:
+                    debug_data_numpy["raw_obs"] = raw_obs
+                outputs["debug_data"] = debug_data_numpy
 
         return outputs
 
     def create_batch_obs(self, observations: list[dict]) -> _model.Observation:
         # Stack observations into batch format
         batched_obs = {}
+
+        if self._is_triton_optimized:
+            batched_obs = {
+                "state": np.stack([obs["observation/state"] for obs in observations], axis=0),
+                "base_0_rgb": np.stack([obs["observation/image"] for obs in observations], axis=0),
+                "left_wrist_0_rgb": np.stack([obs["observation/wrist_image"] for obs in observations], axis=0),
+                "right_wrist_0_rgb": np.stack([obs["observation/wrist_image"] for obs in observations], axis=0),
+                "prompt": np.stack([obs["prompt"] for obs in observations], axis=0),
+            }
+            return batched_obs
 
         # FIXME: don't hardcode these values
         keys = ("observation/state", "observation/image", "observation/wrist_image", "prompt")
@@ -245,15 +322,6 @@ class Policy(BasePolicy):
                 for req in requests
             ]
 
-        # Fast batched path for plain observation dicts (non-RTC).
-        observation = self.create_batch_obs([request.observation for request in requests])
-        # Prepare kwargs for sample_actions
-        sample_kwargs = dict(self._sample_kwargs)
-        sample_kwargs["return_debug_data"] = any_debug_data
-        if noise is not None:
-            noise = torch.from_numpy(noise).to(self._pytorch_device) if self._is_pytorch_model else jnp.asarray(noise)
-            sample_kwargs["noise"] = noise
-
         # TODO: separate logic for jax and pytorch?
         if not self._is_pytorch_model:
             # Convert to jax.Array (already batched)
@@ -261,6 +329,91 @@ class Policy(BasePolicy):
         else:
             # Convert inputs to PyTorch tensors and move to correct device
             sample_rng_or_pytorch_device = self._pytorch_device
+
+        observation = self.create_batch_obs([req.observation for req in requests])
+
+        if self._is_triton_optimized:
+            # Batched Triton inference path - TODO Rohan: can be squashed into Jax batch path once below TODO is resolved
+            
+            # Prepare kwargs for sample_actions
+            sample_kwargs = dict(self._sample_kwargs)
+            sample_kwargs["return_debug_data"] = any_debug_data
+            
+            # Handle batched noise if provided
+            if noise is not None:
+                sample_kwargs["noise"] = np.asarray(noise)
+            
+            start_time = time.monotonic()
+            # TODO Rohan: return state_norm since Triton kernels bypass input_transform for internal method. Figure out why input_transform doesn't work
+            actions, state_norm, times, debug_data = self._sample_actions(
+                sample_rng_or_pytorch_device, 
+                observation, 
+                **sample_kwargs
+            )
+            times["infer_total"] = time.monotonic() - start_time
+            
+            # Convert actions to numpy
+            actions_np = np.asarray(actions)
+            
+            # Process each batch element
+            results: list[InferResponse] = []
+            for i in range(len(requests)):
+                req = requests[i]
+                
+                # Extract actions for this batch element
+                action_i = actions_np[i]
+                
+                # Extract normalized state for this batch element
+                state_norm_i = state_norm[i]
+                
+                result: dict[str, Any] = {"state": state_norm_i, "actions": action_i}
+                
+                # Apply the full output transform (including Unnormalize)
+                result = self._output_transform(result)
+                result["policy_timing"] = times
+                
+                # Add debug data if requested
+                if any_debug_data or getattr(req, "return_debug_data", False):
+                    debug_np: dict[str, Any] = {}
+                    if debug_data is not None:
+                        # Extract debug data for this batch element
+                        for debug_key, debug_value in debug_data.items():
+                            if isinstance(debug_value, dict):
+                                debug_np[debug_key] = {}
+                                for subkey, subvalue in debug_value.items():
+                                    if isinstance(subvalue, np.ndarray) and len(subvalue.shape) > 0:
+                                        debug_np[debug_key][subkey] = subvalue[i] if subvalue.shape[0] == len(requests) else subvalue
+                                    else:
+                                        debug_np[debug_key][subkey] = subvalue
+                            else:
+                                if isinstance(debug_value, np.ndarray) and len(debug_value.shape) > 0:
+                                    debug_np[debug_key] = debug_value[i] if debug_value.shape[0] == len(requests) else debug_value
+                                else:
+                                    debug_np[debug_key] = debug_value
+                    
+                    debug_np["output_actions"] = action_i
+                    
+                    # Handle per-request noise
+                    req_noise = getattr(req, "noise", None)
+                    if req_noise is None and noise is not None:
+                        req_noise = noise[i] if noise.ndim == 3 else noise
+                    if req_noise is not None:
+                        debug_np["noise"] = np.asarray(req_noise)
+                    
+                    debug_np["final_actions"] = result["actions"]
+                    if raw_obs_list is not None:
+                        debug_np["raw_obs"] = raw_obs_list[i]
+                    result["debug_data"] = debug_np
+                
+                results.append(result)
+            
+            return results
+        # Prepare kwargs for sample_actions
+        sample_kwargs = dict(self._sample_kwargs)
+        sample_kwargs["return_debug_data"] = any_debug_data
+        if noise is not None:
+            noise = torch.from_numpy(noise).to(self._pytorch_device) if self._is_pytorch_model else jnp.asarray(noise)
+            sample_kwargs["noise"] = noise
 
         start_time = time.monotonic()
         actions, times, debug_data = self._sample_actions(sample_rng_or_pytorch_device, observation, **sample_kwargs)

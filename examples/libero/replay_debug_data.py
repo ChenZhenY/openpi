@@ -32,9 +32,10 @@ import logging
 import pathlib
 import time
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import imageio
+import matplotlib.pyplot as plt
 import numpy as np
 from libero.libero import benchmark
 from rich.console import Console
@@ -62,6 +63,8 @@ class ReplayConfig:
     action_dim: int = 7  # Actual robot action dimension (6 DoF + gripper for LIBERO)
     output_video: Optional[str] = None
     use_saved_actions: bool = False  # If True, use saved output_actions directly
+    return_debug_data: bool = False  # If True, request debug payloads from policy (if supported)
+    debug_report_path: Optional[str] = None  # Where to write per-chunk debug comparison report (jsonl)
 
 
 def load_metadata(debug_data_dir: pathlib.Path) -> dict:
@@ -181,11 +184,147 @@ def get_saved_actions_from_debug(debug_data: dict, action_dim: int = 7) -> np.nd
     return actions
 
 
+def get_saved_output_actions_from_debug(debug_data: dict) -> np.ndarray:
+    """Extract raw model output_actions from debug data.
+
+    This is the (typically normalized) model output before output transforms and slicing.
+    Expected shape: (action_horizon, model_action_dim) (e.g. (50, 32) for Pi0).
+    """
+    actions = debug_data.get("output_actions")
+    if actions is None:
+        raise ValueError("No output_actions found in debug data")
+    if actions.ndim == 3 and actions.shape[0] == 1:
+        actions = actions[0]
+    return np.asarray(actions)
+
+
+def _compute_array_diff(a: np.ndarray, b: np.ndarray) -> dict:
+    a = np.asarray(a)
+    b = np.asarray(b)
+    if a.shape != b.shape:
+        return {
+            "shape_a": list(a.shape),
+            "shape_b": list(b.shape),
+            "mean_abs": None,
+            "max_abs": None,
+        }
+    diff = np.abs(a.astype(np.float64) - b.astype(np.float64))
+    return {
+        "shape": list(a.shape),
+        "mean_abs": float(np.mean(diff)),
+        "max_abs": float(np.max(diff)),
+    }
+
+
+def _safe_get(d: dict, path: List[str]):
+    cur = d
+    for p in path:
+        if not isinstance(cur, dict) or p not in cur:
+            return None
+        cur = cur[p]
+    return cur
+
+
+def _append_jsonl(path: pathlib.Path, record: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(record) + "\n")
+
+
+def plot_action_comparison(
+    replay_actions: np.ndarray,
+    saved_actions: np.ndarray,
+    output_path: pathlib.Path,
+    action_horizon: int = 50,
+    action_dim_names: Optional[List[str]] = None,
+) -> None:
+    """Plot comparison of replay actions vs saved actions for each dimension.
+    
+    Args:
+        replay_actions: Actions used during replay, shape (num_steps, action_dim)
+        saved_actions: Original saved actions, shape (num_steps, action_dim)
+        output_path: Path to save the plot image
+        action_horizon: Number of actions per chunk (for grid spacing)
+        action_dim_names: Optional names for each action dimension
+    """
+    num_steps, action_dim = replay_actions.shape
+    
+    if action_dim_names is None:
+        # Default names for LIBERO 7-DoF actions
+        action_dim_names = [
+            "X", "Y", "Z",
+            "RX", "RY", "RZ", "Gripper"
+        ]
+        if action_dim > len(action_dim_names):
+            action_dim_names.extend([f"Dim {i}" for i in range(len(action_dim_names), action_dim)])
+    
+    # Create figure with subplots for each action dimension
+    fig, axes = plt.subplots(action_dim, 1, figsize=(14, 3 * action_dim), sharex=True)
+    if action_dim == 1:
+        axes = [axes]
+    
+    timesteps = np.arange(num_steps)
+    
+    # Calculate differences for summary
+    differences = np.abs(replay_actions - saved_actions)
+    max_diff = np.max(differences, axis=0)
+    mean_diff = np.mean(differences, axis=0)
+    
+    for dim in range(action_dim):
+        ax = axes[dim]
+        
+        # Plot saved actions (original)
+        ax.plot(timesteps, saved_actions[:, dim], 'b-', linewidth=2, 
+                label='Saved (Original)', alpha=0.8)
+        
+        # Plot replay actions
+        ax.plot(timesteps, replay_actions[:, dim], 'r--', linewidth=2, 
+                label='Replay', alpha=0.8)
+        
+        # Shade the difference
+        ax.fill_between(timesteps, saved_actions[:, dim], replay_actions[:, dim],
+                        alpha=0.3, color='purple', label='Difference')
+        
+        # Title with difference stats
+        dim_name = action_dim_names[dim] if dim < len(action_dim_names) else f"Dim {dim}"
+        ax.set_title(f"{dim_name} | Max Diff: {max_diff[dim]:.6f}, Mean Diff: {mean_diff[dim]:.6f}",
+                    fontsize=12, fontweight='bold')
+        ax.set_ylabel("Value")
+        ax.legend(loc='upper right', fontsize=9)
+        ax.grid(True, alpha=0.3, which='major')
+        
+        # Add vertical lines at action horizon boundaries
+        for boundary in range(0, num_steps + 1, action_horizon):
+            ax.axvline(x=boundary, color='gray', linestyle='--', linewidth=1, alpha=0.5)
+    
+    # Set x-axis ticks at action horizon boundaries
+    xticks = np.arange(0, num_steps + 1, action_horizon)
+    axes[-1].set_xticks(xticks)
+    axes[-1].set_xlabel("Timestep")
+    
+    # Overall title with determinism verdict
+    total_max_diff = np.max(differences)
+    total_mean_diff = np.mean(differences)
+    is_deterministic = total_max_diff < 1e-5
+    
+    verdict_color = 'green' if is_deterministic else 'red'
+    
+    fig.suptitle(
+        f"Action Comparison: Replay vs Saved\n"
+        f"Total Max Diff: {total_max_diff:.8f} | Total Mean Diff: {total_mean_diff:.8f}\n",
+        fontsize=14, fontweight='bold', color=verdict_color
+    )
+    
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    plt.close(fig)
+
+
 def replay_episode(
     config: ReplayConfig,
     policy: Optional[_websocket_client_policy.WebsocketClientPolicy],
     console: Console,
-) -> bool:
+) -> Tuple[bool, np.ndarray, np.ndarray]:
     """Replay a single episode from debug data.
     
     Args:
@@ -194,7 +333,10 @@ def replay_episode(
         console: Rich console for output
     
     Returns:
-        True if episode was successful, False otherwise.
+        Tuple of (success, replay_actions, saved_actions) where:
+        - success: True if episode was successful, False otherwise
+        - replay_actions: Actions used during replay, shape (num_steps, action_dim)
+        - saved_actions: Original saved actions, shape (num_steps, action_dim)
     """
     # Load metadata and chunks
     metadata = load_metadata(config.debug_data_dir)
@@ -240,12 +382,31 @@ def replay_episode(
     # Reset environment
     env.reset()
     
+    # Pre-extract all saved actions from chunks for comparison
+    all_saved_actions = []
+    for chunk in chunks:
+        chunk_data = unflatten_debug_data(chunk)
+        saved_chunk_actions = get_saved_actions_from_debug(chunk_data, config.action_dim)
+        all_saved_actions.append(saved_chunk_actions)
+    
     # Replay loop
     frames: List[np.ndarray] = []
+    replay_actions_list: List[np.ndarray] = []  # Track actions used during replay
+    saved_actions_list: List[np.ndarray] = []   # Track corresponding saved actions
     chunk_idx = 0
     action_idx = 0
     current_actions = None
+    current_saved_actions = None  # Saved actions for current chunk
     step = 0
+    chunk_debug_report_path: pathlib.Path | None = None
+    if config.return_debug_data:
+        if config.debug_report_path is None:
+            chunk_debug_report_path = config.debug_data_dir / "triton_debug_compare.jsonl"
+        else:
+            chunk_debug_report_path = pathlib.Path(config.debug_report_path)
+        # Reset report file for a clean run.
+        if chunk_debug_report_path.exists():
+            chunk_debug_report_path.unlink()
     
     with Progress(
         SpinnerColumn(),
@@ -280,9 +441,18 @@ def replay_episode(
                     # Load next chunk
                     chunk_data = unflatten_debug_data(chunks[chunk_idx])
                     
+                    # Always get saved actions for comparison
+                    current_saved_actions = all_saved_actions[chunk_idx]
+                    saved_output_actions = None
+                    if config.return_debug_data:
+                        try:
+                            saved_output_actions = get_saved_output_actions_from_debug(chunk_data)
+                        except Exception:
+                            saved_output_actions = None
+                    
                     if config.use_saved_actions:
                         # Use saved output_actions directly (extract only action_dim dimensions)
-                        current_actions = get_saved_actions_from_debug(chunk_data, config.action_dim)
+                        current_actions = current_saved_actions.copy()
                     else:
                         # Re-infer from policy with saved noise
                         if policy is None:
@@ -293,9 +463,90 @@ def replay_episode(
                         debug_obs = create_observation_from_debug(chunk_data, task_description, step)
                         
                         # Call policy with the saved noise
-                        response = policy.infer(debug_obs, noise=noise)
+                        response = policy.infer(debug_obs, noise=noise, return_debug_data=config.return_debug_data)
                         # Policy response already has correct action_dim from post-processing
                         current_actions = response["actions"]
+
+                        # If requested, compare Triton/JAX debug payloads at the chunk boundary.
+                        if config.return_debug_data and chunk_debug_report_path is not None:
+                            triton_debug = response.get("debug_data", {}) if isinstance(response, dict) else {}
+                            triton_output_actions = triton_debug.get("output_actions", None)
+                            triton_final_actions = triton_debug.get("final_actions", None)
+                            triton_noise = triton_debug.get("noise", None)
+                            triton_obs_after = triton_debug.get("obs_after_preprocess", None)
+
+                            record = {
+                                "chunk_idx": int(chunk_idx),
+                                "step": int(step),
+                                "has_saved_output_actions": saved_output_actions is not None,
+                                "has_triton_output_actions": triton_output_actions is not None,
+                                "has_triton_final_actions": triton_final_actions is not None,
+                                "has_triton_noise": triton_noise is not None,
+                                "has_triton_obs_after_preprocess": triton_obs_after is not None,
+                            }
+
+                            # Confirm the server actually used the same noise.
+                            if noise is not None and triton_noise is not None:
+                                record["noise_diff"] = _compute_array_diff(
+                                    np.asarray(noise), np.asarray(triton_noise)
+                                )
+                            else:
+                                record["noise_diff"] = None
+
+                            if saved_output_actions is not None and triton_output_actions is not None:
+                                record["output_actions_diff"] = _compute_array_diff(
+                                    saved_output_actions, np.asarray(triton_output_actions)
+                                )
+                            else:
+                                record["output_actions_diff"] = None
+
+                            # Compare preprocessing (saved vs Triton), to localize divergence.
+                            saved_state_after = _safe_get(chunk_data, ["obs_after_preprocess", "state"])
+                            triton_state_after = None
+                            if isinstance(triton_obs_after, dict):
+                                triton_state_after = triton_obs_after.get("state", None)
+                            if saved_state_after is not None and triton_state_after is not None:
+                                record["obs_after_preprocess_state_diff"] = _compute_array_diff(
+                                    np.asarray(saved_state_after), np.asarray(triton_state_after)
+                                )
+                            else:
+                                record["obs_after_preprocess_state_diff"] = None
+
+                            # Images are large; we still compute exact diff stats but do not store arrays.
+                            saved_base_after = _safe_get(chunk_data, ["obs_after_preprocess", "images", "base_0_rgb"])
+                            saved_left_after = _safe_get(chunk_data, ["obs_after_preprocess", "images", "left_wrist_0_rgb"])
+                            triton_imgs_after = None
+                            if isinstance(triton_obs_after, dict):
+                                triton_imgs_after = triton_obs_after.get("images", None)
+                            if isinstance(triton_imgs_after, dict):
+                                triton_base_after = triton_imgs_after.get("base_0_rgb", None)
+                                triton_left_after = triton_imgs_after.get("left_wrist_0_rgb", None)
+                            else:
+                                triton_base_after = None
+                                triton_left_after = None
+
+                            record["obs_after_preprocess_base_rgb_diff"] = (
+                                _compute_array_diff(np.asarray(saved_base_after), np.asarray(triton_base_after))
+                                if saved_base_after is not None and triton_base_after is not None
+                                else None
+                            )
+                            record["obs_after_preprocess_left_wrist_rgb_diff"] = (
+                                _compute_array_diff(np.asarray(saved_left_after), np.asarray(triton_left_after))
+                                if saved_left_after is not None and triton_left_after is not None
+                                else None
+                            )
+
+                            # Compare post-processed actions too.
+                            if triton_final_actions is not None:
+                                record["final_actions_diff"] = _compute_array_diff(
+                                    current_saved_actions, np.asarray(triton_final_actions)
+                                )
+                            else:
+                                record["final_actions_diff"] = _compute_array_diff(
+                                    current_saved_actions, np.asarray(current_actions)
+                                )
+
+                            _append_jsonl(chunk_debug_report_path, record)
                     
                     chunk_idx += 1
                     action_idx = 0
@@ -304,11 +555,18 @@ def replay_episode(
                     
                     # Get action from the new chunk
                     action = current_actions[action_idx]
+                    saved_action = current_saved_actions[action_idx]
                     action_idx += 1
             else:
                 # Get next action from current chunk
                 action = current_actions[action_idx]
+                saved_action = current_saved_actions[action_idx]
                 action_idx += 1
+            
+            # Track actions for comparison (only when we have valid saved actions)
+            if not ran_out_of_chunks:
+                replay_actions_list.append(action.copy() if hasattr(action, 'copy') else np.array(action))
+                saved_actions_list.append(saved_action.copy() if hasattr(saved_action, 'copy') else np.array(saved_action))
             
             # Remember last action for when we run out of chunks
             last_action = action
@@ -341,7 +599,11 @@ def replay_episode(
     # Cleanup
     env.close()
     
-    return success
+    # Convert action lists to arrays
+    replay_actions = np.array(replay_actions_list) if replay_actions_list else np.array([])
+    saved_actions = np.array(saved_actions_list) if saved_actions_list else np.array([])
+    
+    return success, replay_actions, saved_actions
 
 
 def main():
@@ -389,6 +651,17 @@ def main():
         default=None,
         help="Output video path (default: <debug_data_dir>/replay.mp4)",
     )
+    parser.add_argument(
+        "--return_debug_data",
+        action="store_true",
+        help="If set, request debug payloads from the policy server and write a per-chunk comparison report.",
+    )
+    parser.add_argument(
+        "--debug_report_path",
+        type=str,
+        default=None,
+        help="Where to write the per-chunk debug comparison report (jsonl). Default: <debug_data_dir>/triton_debug_compare.jsonl",
+    )
     
     args = parser.parse_args()
     
@@ -402,6 +675,8 @@ def main():
         max_steps=args.max_steps,
         output_video=args.output_video,
         use_saved_actions=args.use_saved_actions,
+        return_debug_data=args.return_debug_data,
+        debug_report_path=args.debug_report_path,
     )
     
     console.print("[bold magenta]═══════════════════════════════════════════════════════════[/bold magenta]")
@@ -425,7 +700,29 @@ def main():
     
     # Run replay
     try:
-        success = replay_episode(config, policy, console)
+        success, replay_actions, saved_actions = replay_episode(config, policy, console)
+        
+        # Generate action comparison plot
+        if len(replay_actions) > 0 and len(saved_actions) > 0:
+            plot_path = config.debug_data_dir / "action_comparison.png"
+            console.print(f"\n[bold]Generating action comparison plot: {plot_path}[/bold]")
+            plot_action_comparison(replay_actions, saved_actions, plot_path, action_horizon=config.action_horizon)
+            
+            # Print summary statistics
+            differences = np.abs(replay_actions - saved_actions)
+            max_diff = np.max(differences)
+            mean_diff = np.mean(differences)
+            is_deterministic = max_diff < 1e-5
+            
+            console.print()
+            console.print("[bold cyan]Action Comparison Summary:[/bold cyan]")
+            console.print(f"  Total timesteps compared: {len(replay_actions)}")
+            console.print(f"  Max absolute difference: {max_diff:.10f}")
+            console.print(f"  Mean absolute difference: {mean_diff:.10f}")
+            if is_deterministic:
+                console.print("[bold green]  Verdict: DETERMINISTIC (max diff < 1e-5)[/bold green]")
+            else:
+                console.print("[bold red]  Verdict: NON-DETERMINISTIC (max diff >= 1e-5)[/bold red]")
         
         console.print()
         console.print("[bold magenta]═══════════════════════════════════════════════════════════[/bold magenta]")

@@ -139,6 +139,6 @@ class LiberoOutputs(transforms.DataTransformFn):
             return {
                 "actions": np.asarray(data["actions"][:, :7]),
                 "state": data["state"],
-                "origin_actions": data["origin_actions"],
+                # "origin_actions": data["origin_actions"],
             }
         raise ValueError(f"Unexpected actions shape: {actions.shape}")

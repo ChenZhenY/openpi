@@ -88,7 +88,7 @@ DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
 
 
 def create_default_policy(
-    env: EnvMode, *, default_prompt: str | None = None, sample_kwargs: dict[str, Any] | None = None
+    env: EnvMode, *, batch_size: int = 1, default_prompt: str | None = None, sample_kwargs: dict[str, Any] | None = None
 ) -> _policy.Policy:
     """Create a default policy for the given environment."""
     if checkpoint := DEFAULT_CHECKPOINT.get(env):
@@ -98,6 +98,7 @@ def create_default_policy(
             default_prompt=default_prompt,
             sample_kwargs=sample_kwargs,
             use_triton_optimized=(env == EnvMode.LIBERO_REALTIME),
+            batch_size=batch_size,
         )
     raise ValueError(f"Unsupported environment mode: {env}")
 
@@ -112,11 +113,12 @@ def create_policy(args: Args) -> _policy.Policy:
                 default_prompt=args.default_prompt,
                 sample_kwargs={"num_steps": args.num_steps},
                 use_triton_optimized=(args.env == EnvMode.LIBERO_REALTIME),
+                batch_size=args.batch_size,
             )
         case Default():
             print(type(args.policy))
             return create_default_policy(
-                args.env, default_prompt=args.default_prompt, sample_kwargs={"num_steps": args.num_steps}
+                args.env, batch_size=args.batch_size, default_prompt=args.default_prompt, sample_kwargs={"num_steps": args.num_steps}
             )
 
 
