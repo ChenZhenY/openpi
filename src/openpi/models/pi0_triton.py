@@ -73,7 +73,6 @@ class Pi0Triton(_model.BaseModel):
             "Pi0Triton is an inference-only model and does not support training. Use PI0Pytorch for training."
         )
 
-    @override
     def guided_inference(
         self, rng: at.KeyArrayLike, prev_action: _model.Actions, observation: _model.Observation, **kwargs
     ) -> _model.Actions:

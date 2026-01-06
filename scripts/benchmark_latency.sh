@@ -2,22 +2,22 @@
 #SBATCH --job-name=benchmark_latency
 #SBATCH --output=logs/benchmark_latency_%A_%a.out
 #SBATCH --error=logs/benchmark_latency_%A_%a.err
-#SBATCH --array=0-6
+#SBATCH --array=0-5
 #SBATCH --partition=overcap
 #SBATCH --time=24:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=6
 #SBATCH --mem=128G
-#SBATCH --gres=gpu:a40:1
+#SBATCH --gres=gpu:l40s:1
 
 # Exit on error
 set -e  
 
-BATCH_SIZES=(64)
+BATCH_SIZES=(1 2 4 8 16 32)
 BATCH_SIZE=${BATCH_SIZES[$SLURM_ARRAY_TASK_ID]}
 
-port=$((8000 + ${SLURM_ARRAY_TASK_ID:-0}))
+port=$((8080 + ${SLURM_ARRAY_TASK_ID:-0}))
 
 echo "======================================"
 echo "Array Task ID: $SLURM_ARRAY_TASK_ID"
@@ -43,7 +43,7 @@ trap cleanup EXIT INT TERM
 
 # Start the background process
 cmd="uv run scripts/serve_policy.py \
-    --env=LIBERO_REALTIME \
+    --env=LIBERO \
     --batch_size=$BATCH_SIZE \
     --port=$port"
 
@@ -61,7 +61,7 @@ sleep 50
 echo "Running benchmark..."
 
 # for loop over request rates
-REQUEST_RATES=(5 10 20 50 100)
+REQUEST_RATES=(10 20 50 100)
 for REQUEST_RATE in ${REQUEST_RATES[@]}; do
     uv run scripts/benchmark.py \
         --host localhost \
@@ -72,5 +72,5 @@ for REQUEST_RATE in ${REQUEST_RATES[@]}; do
         --max-concurrency 300 \
         --metric-percentiles 95,99 \
         --save-result \
-        --save-result-dir benchmarks/latency_batching_300
+        --save-result-dir benchmarks/with_typechecking
 done

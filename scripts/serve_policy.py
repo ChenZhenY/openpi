@@ -1,5 +1,7 @@
 import dataclasses
+import datetime
 import logging
+import pathlib
 import socket
 from typing import Any
 
@@ -49,13 +51,11 @@ class Args:
     # Batch size to use for inference.
     batch_size: int = 1
 
-    # Timeout (in milliseconds) to wait after the first request in a batch
-    # for additional requests before running inference. A value of 0 disables
-    # waiting and processes whatever is available immediately.
-    batch_timeout_ms: int = 0
-
     # Number of steps to use for sampling.
     num_steps: int = 10
+
+    # Log directory to save the logs to.
+    log_dir: str | None = None
 
 
 # Default checkpoints that should be used for each environment.
@@ -116,6 +116,16 @@ def create_policy(args: Args) -> _policy.Policy:
 
 
 def main(args: Args) -> None:
+    if args.log_dir is not None:
+        log_path = (
+            pathlib.Path(args.log_dir)
+            / f"serve_policy_{datetime.datetime.now(tz=datetime.UTC).strftime('%Y%m%d_%H%M%S')}.log"
+        )
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        logging.basicConfig(level=logging.INFO, datefmt="[%X]", force=True, filename=log_path)
+    else:
+        logging.basicConfig(level=logging.INFO, datefmt="[%X]", force=True)
+
     # Create policy factory to avoid CUDA context fork issues
     def policy_factory():
         policy = create_policy(args)
@@ -142,7 +152,6 @@ def main(args: Args) -> None:
     policy_metadata["action_horizon"] = train_config.model.action_horizon
     policy_metadata["env"] = args.env.value
     policy_metadata["batch_size"] = args.batch_size
-    policy_metadata["batch_timeout_ms"] = args.batch_timeout_ms
 
     hostname = socket.gethostname()
     local_ip = socket.gethostbyname(hostname)
@@ -154,11 +163,9 @@ def main(args: Args) -> None:
         port=args.port,
         metadata=policy_metadata,
         batch_size=args.batch_size,
-        batch_timeout_ms=args.batch_timeout_ms,
     )
     server.serve_forever()
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, force=True)
     main(tyro.cli(Args))

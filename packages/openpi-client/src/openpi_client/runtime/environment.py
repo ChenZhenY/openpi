@@ -30,3 +30,7 @@ class Environment(abc.ABC):
     @abc.abstractmethod
     def apply_action(self, action: dict) -> None:
         """Take an action in the environment."""
+
+    @abc.abstractmethod
+    def close(self) -> None:
+        """Close the environment."""

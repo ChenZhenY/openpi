@@ -2,7 +2,6 @@ import csv
 import dataclasses
 from datetime import datetime
 import logging
-import math
 import multiprocessing
 from multiprocessing import Manager
 from multiprocessing import Pool
@@ -14,7 +13,6 @@ from typing import Optional, Tuple
 
 import imageio
 from libero.libero import benchmark
-from libero.libero import get_libero_path
 from libero.libero.benchmark import Task
 from libero.libero.envs import OffScreenRenderEnv
 import numpy as np
@@ -23,6 +21,9 @@ from openpi_client import image_tools
 from openpi_client import websocket_client_policy as _websocket_client_policy
 import tqdm
 import tyro
+
+from examples.libero import utils
+from examples.libero import logging_config
 
 LIBERO_DUMMY_ACTION = [0.0] * 6 + [-1.0]
 LIBERO_ENV_RESOLUTION = 256  # resolution used to render training data
@@ -76,7 +77,7 @@ def init_worker(task: Task, args: Args, status_dict, results_dict) -> None:
     global _worker_env, _worker_task_description
     global _worker_client, _worker_status_dict, _worker_results_dict, _worker_args  # noqa: PLW0603
 
-    _worker_env, _worker_task_description = _get_libero_env(
+    _worker_env, _worker_task_description = utils._get_libero_env(
         task, LIBERO_ENV_RESOLUTION, args.seed
     )
 
@@ -99,9 +100,7 @@ def init_worker(task: Task, args: Args, status_dict, results_dict) -> None:
         raise ValueError(f"Unknown action horizon: {args.action_horizon}")
 
     # Initialize ActionChunkBroker with RTC support
-    ws_client = _websocket_client_policy.WebsocketClientPolicy(
-        args.host, args.port, latency_ms=args.latency_ms
-    )
+    ws_client = _websocket_client_policy.WebsocketClientPolicy(args.host, args.port)
     _worker_client = action_chunk_broker.ActionChunkBroker(
         policy=ws_client,
         action_horizon=args.action_horizon,
@@ -201,7 +200,7 @@ def eval_libero(
                 "observation/state": np.concatenate(
                     (
                         obs["robot0_eef_pos"],
-                        _quat2axisangle(obs["robot0_eef_quat"]),
+                        utils._quat2axisangle(obs["robot0_eef_quat"]),
                         obs["robot0_gripper_qpos"],
                     )
                 ),
@@ -560,47 +559,7 @@ def main(args: Args) -> None:
         )
 
 
-def _get_libero_env(
-    task: Task, resolution: int, seed: int
-) -> Tuple[OffScreenRenderEnv, str]:
-    """Initializes and returns the LIBERO environment, along with the task description."""
-    task_description = task.language
-    task_bddl_file = (
-        pathlib.Path(get_libero_path("bddl_files"))
-        / task.problem_folder
-        / task.bddl_file
-    )
-    env_args = {
-        "bddl_file_name": task_bddl_file,
-        "camera_heights": resolution,
-        "camera_widths": resolution,
-    }
-    env = OffScreenRenderEnv(**env_args)
-    env.seed(
-        seed
-    )  # IMPORTANT: seed seems to affect object positions even when using fixed initial state
-    return env, task_description
-
-
-def _quat2axisangle(quat):
-    """
-    Copied from robosuite: https://github.com/ARISE-Initiative/robosuite/blob/eafb81f54ffc104f905ee48a16bb15f059176ad3/robosuite/utils/transform_utils.py#L490C1-L512C55
-    """
-    # clip quaternion
-    if quat[3] > 1.0:
-        quat[3] = 1.0
-    elif quat[3] < -1.0:
-        quat[3] = -1.0
-
-    den = np.sqrt(1.0 - quat[3] * quat[3])
-    if math.isclose(den, 0.0):
-        # This is (close to) a zero degree rotation, immediately return
-        return np.zeros(3)
-
-    return (quat[:3] * 2.0 * math.acos(quat[3])) / den
-
-
 if __name__ == "__main__":
     multiprocessing.set_start_method("spawn")
-    logging.basicConfig(level=logging.INFO)
+    logging_config.setup_logging()
     tyro.cli(main)

@@ -60,20 +60,15 @@ class Runtime:
         self._in_episode = True
         self._episode_steps = 0
         step_time = 1 / self._max_hz if self._max_hz > 0 else 0
-        last_step_time = time.time()
+        last_step_time = time.perf_counter()
 
         while self._in_episode:
             self._step()
             self._episode_steps += 1
 
-            # Sleep to maintain the desired frame rate
-            now = time.time()
-            dt = now - last_step_time
-            if dt < step_time:
-                time.sleep(step_time - dt)
-                last_step_time = time.time()
-            else:
-                last_step_time = now
+            while time.perf_counter() - last_step_time < step_time:
+                pass
+            last_step_time = time.perf_counter()
 
         logging.info("Episode completed.")
         for subscriber in self._subscribers:
@@ -92,3 +87,7 @@ class Runtime:
             self._max_episode_steps > 0 and self._episode_steps >= self._max_episode_steps
         ):
             self.mark_episode_complete()
+
+    def close(self) -> None:
+        """Closes the runtime."""
+        self._environment.close()

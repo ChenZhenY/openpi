@@ -90,7 +90,6 @@ import os
 
 result_dir = os.environ["RESULT_DIR"]
 batch_size = int(os.environ["BATCH_SIZE"])
-batch_timeout_ms = int(os.environ["TIMEOUT_MS"])
 request_rate = float(os.environ["REQUEST_RATE"])
 
 exists = False
@@ -106,7 +105,6 @@ for fname in os.listdir(result_dir):
 
     if (
         data.get("batch_size") == batch_size
-        and int(data.get("batch_timeout_ms", 0)) == batch_timeout_ms
         and float(data.get("request_rate")) == request_rate
     ):
         exists = True
