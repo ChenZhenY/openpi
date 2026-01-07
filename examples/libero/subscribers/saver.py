@@ -70,7 +70,7 @@ class Saver(_subscriber.Subscriber):
     def on_step(self, observation: dict, action: dict) -> None:
         self._timestamps.append(
             Timestamp(
-                timestamp=time.time(),
+                timestamp=time.perf_counter(),
                 action_chunk_index=action["action_chunk_index"],
                 action_index=action["action_chunk_current_step"],
                 env_step=observation["step"],

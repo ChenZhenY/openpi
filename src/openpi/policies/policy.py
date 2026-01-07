@@ -80,13 +80,8 @@ class Policy(BasePolicy):
             self._model = self._model.to(pytorch_device)
             self._model.eval()
         else:
-            # JAX model setup
-            # TODO: compile everything
             self._rng = rng or jax.random.key(0)
-            self._model.embed_prefix = nnx_utils.module_jit(self._model.embed_prefix)
-            self._model.prefill = nnx_utils.module_jit(self._model.prefill)
-            self._model.flow_matching = nnx_utils.module_jit(self._model.flow_matching)
-            self._model.guided_flow_matching = nnx_utils.module_jit(model.guided_flow_matching)
+            self._model.sample_actions = nnx_utils.module_jit(self._model.sample_actions)
         self._sample_actions = model.sample_actions
 
     @override
@@ -264,7 +259,12 @@ class Policy(BasePolicy):
             return batched_obs
 
         # FIXME: don't hardcode these values
-        keys = ("observation/state", "observation/image", "observation/wrist_image", "prompt")
+        keys = (
+            "observation/state",
+            "observation/image",
+            "observation/wrist_image",
+            "prompt",
+        )
         for key in keys:
             # Stack all values for this key
             values = [obs[key] for obs in observations]
