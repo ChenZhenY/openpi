@@ -1153,8 +1153,9 @@ _CONFIGS = [
         # Each dataset uses its own prompt handling if prompt_from_task is True.
         model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
         data=MultiDatasetLiberoDataConfig(
-            # repo_ids=["pi_libero_lerobot", "lerobot_interpolation_50steps_1112"],
-            repo_ids=["pi_libero_lerobot", "lerobot_interpolation_50steps_inter10_1122"],
+            repo_ids=["pi_libero_lerobot", "lerobot_interpolation_30steps_check_1206"],
+            # repo_ids=["pi_libero_lerobot", "lerobot_interpolation_30steps_1112"],
+            # repo_ids=["pi_libero_lerobot", "lerobot_interpolation_50steps_inter10_1122"],
             # repo_ids=["pi_libero_lerobot", "lerobot_all_task_pairs_step_30_1107_lang"],  # Example: cotrain on multiple datasets
             # Optional: adjust sampling ratio. [2.0, 1.0] means dataset 0 is sampled twice as often as dataset 1.
             # If None, uniform sampling is used.
@@ -1168,7 +1169,7 @@ _CONFIGS = [
             ),
         ),
         batch_size=256,
-        num_train_steps=30_000,
+        num_train_steps=2010,
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_libero/params"),
         save_interval=2000,
         keep_period=2000,
@@ -1216,7 +1217,7 @@ _CONFIGS = [
         ema_decay=0.999,
     ),
     
-TrainConfig(
+    TrainConfig(
         name="pi05_libero_cotraining_interpolation_1122",
         # Example config demonstrating cotraining on multiple Libero datasets.
         # All datasets share the same transforms and normalization stats (from asset_id).
@@ -1224,11 +1225,12 @@ TrainConfig(
         model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
         data=MultiDatasetLiberoDataConfig(
             # repo_ids=["pi_libero_lerobot", "lerobot_interpolation_50steps_1122"], 
-            repo_ids=["pi_libero_lerobot", "lerobot_interpolation_50steps_inter5_1122"],
+            # repo_ids=["pi_libero_lerobot", "lerobot_interpolation_50steps_first30_1125"],
+            repo_ids=["pi_libero_lerobot", "lerobot_interpolation_transporting_1210", "lerobot_interpolation_50steps_1122"],
             # repo_ids=["pi_libero_lerobot", "lerobot_all_task_pairs_step_30_1107_lang"],  # Example: cotrain on multiple datasets
             # Optional: adjust sampling ratio. [2.0, 1.0] means dataset 0 is sampled twice as often as dataset 1.
-            # If None, uniform sampling is used.
-            dataset_weights=[1.0, 3.0],
+            # If None, uniform sampling is used. defaul [1, 3]
+            dataset_weights=[1.0, 10.0, 1.0],
             base_config=DataConfig(prompt_from_task=True),
             extra_delta_transform=False,
             # Use shared normalization stats from a single asset_id
@@ -1238,10 +1240,11 @@ TrainConfig(
             ),
         ),
         batch_size=256,
-        num_train_steps=500,
-        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_libero/params"),
-        save_interval=500,
-        keep_period=500,
+        num_train_steps=6001,
+        # weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_libero/params"), 
+        weight_loader=weight_loaders.CheckpointWeightLoader("/home/hice1/zchen927/scratch/openpi/checkpoints/pi05_libero_cotraining_interpolation_1122/liberogoal_pi_libero_cotraining_interpolation_50steps_1127/3000/paramss"),
+        save_interval=2000,
+        keep_period=2000,
         lr_schedule=_optimizer.CosineDecaySchedule(
             warmup_steps=10_000,
             peak_lr=5e-5,
@@ -1251,6 +1254,32 @@ TrainConfig(
         optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
         ema_decay=0.999,
     ),
+    # TODO: check whether we need to create a new Data config (input output for MFM)
+    TrainConfig(
+        name="pi05_mfm",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
+        data=LeRobotLiberoDataConfig(
+            repo_id="lerobot_mfm_1208",
+            base_config=DataConfig(prompt_from_task=True),
+            # extra_delta_transform=False,
+            extra_delta_transform=True, # proceesed Demo by Rohan is in absolute actions.
+        ),
+        batch_size=256,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=10_000,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        # weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"), # TODO: hack
+        weight_loader=weight_loaders.CheckpointWeightLoader("/home/hice1/zchen927/scratch/openpi/checkpoints/pi05_mfm/pi05_MFM_delta_1209/4000/params"),
+        num_train_steps=10_000,
+        save_interval=4000,
+        keep_period=4000,
+    ),
+
     #
     # Fine-tuning Aloha configs.
     #

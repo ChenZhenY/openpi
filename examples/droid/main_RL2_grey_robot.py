@@ -6,28 +6,28 @@ import datetime
 import faulthandler
 import os
 import signal
-import time
+
 from moviepy.editor import ImageSequenceClip
 import numpy as np
 from openpi_client import image_tools
 from openpi_client import websocket_client_policy
 import pandas as pd
 from PIL import Image
-from droid.robot_env import RobotEnv
+# from droid.robot_env import RobotEnv
 import tqdm
 import tyro
 
-faulthandler.enable()
+from multiprocessing.managers import SharedMemoryManager
+from robomimic.dev.multi_processing.envs.rl2_droid_robot_env_right_camera import RL2DroidEnv
 
-# DROID data collection frequency -- we slow down execution to match this frequency
-DROID_CONTROL_FREQUENCY = 15
+faulthandler.enable()
 
 
 @dataclasses.dataclass
 class Args:
     # Hardware parameters
     left_camera_id: str = "20036094" # "<your_camera_id>"  # e.g., "24259877"
-    right_camera_id: str = "21497414" # "<your_camera_id>"  # e.g., "24514023"
+    right_camera_id: str = "21497414" # "<your_camera_id>"  # e.g., "24514023" # right camera
     wrist_camera_id: str = "14620168" # "<your_camera_id>"  # e.g., "13062452"
 
     # Policy parameters
@@ -46,6 +46,42 @@ class Args:
     remote_port: int = (
         8000  # point this to the port of the policy server, default server port for openpi servers is 8000
     )
+
+camera_config_dict = {"right": {"sn": 21497414,
+                                "fps": 30.0,
+                                "resize": True,
+                                "resize_resolution": (224, 224),
+                                "camera_pos": "left"},
+                        "wrist": {"sn": 14620168,
+                                "fps": 30.0,
+                                "resize": True,
+                                "resize_resolution": (224, 224),
+                                "camera_pos": "left"}
+                        }
+
+# adapt to Droid setup
+obs_key_map = {
+    "robot_timestamp": "robot_timestamp",
+    "joint_positions": "observation/joint_position",
+    "joint_velocities": "observation/joint_velocity",
+    "joint_positions_desired": "observation/joint_position_desired",
+    "joint_velocities_desired": "observation/joint_velocity_desired",
+    "ee_twist_desired": "observation/ee_twist_desired",
+    "ee_pose_desired": "observation/ee_pose_desired",
+    "eef_pos": "eef_pos",
+    "eef_quat": "eef_quat",
+    "eef_axis_angle": "observation/eef_axis_angle",
+    "eef_pose": "observation/eef_pose",
+    # gripper
+    "gripper_state": "observation/gripper_state",
+    "gripper_position": "observation/gripper_position",
+    "gripper_velocity": "observation/gripper_velocity",
+    "gripper_force": "observation/gripper_force",
+    "gripper_timestamp": "observation/gripper_timestamp",
+    # camera
+    "agentview_image": "observation/exterior_image_1_left",
+    "wrist_image": "observation/wrist_image_left"
+}
 
 
 # We are using Ctrl+C to optionally terminate rollouts early -- however, if we press Ctrl+C while the policy server is
@@ -77,7 +113,30 @@ def main(args: Args):
     ), f"Please specify an external camera to use for the policy, choose from ['left', 'right'], but got {args.external_camera}"
 
     # Initialize the Panda environment. Using joint velocity action space and gripper position action space is very important.
-    env = RobotEnv(action_space="joint_velocity", gripper_action_space="position")
+    # env = RobotEnv(action_space="joint_velocity", gripper_action_space="position")
+    
+    # create environment, not from saved ckpt here
+    shm_manager = SharedMemoryManager()
+    shm_manager.start()
+    env = RL2DroidEnv(
+        # env setup
+        shm_manager=shm_manager,
+        frequency=20.0,
+        n_obs_steps=4, # config.algo.horizon.observation_horizon, # TODO: change accrodingly
+        obs_key_map=obs_key_map,
+        # camera setup
+        camera_name="agentview",
+        camera_config_dict=camera_config_dict,
+        save_depth_obs=False,
+        max_obs_buffer_size=30,
+        # robot control setup
+        controller_type="JOINT_POSITION",
+        control_rate_robot=100, # TODO: make sure this higher than env rate
+        robot_latency=0.0,
+        verbose=False
+    )
+    env.start()
+
     print("Created the droid env!")
 
     # Connect to the policy server
@@ -98,7 +157,6 @@ def main(args: Args):
         bar = tqdm.tqdm(range(args.max_timesteps))
         print("Running rollout... press Ctrl+C to stop early.")
         for t_step in bar:
-            start_time = time.time()
             try:
                 # Get the current observation
                 curr_obs = _extract_observation(
@@ -149,11 +207,6 @@ def main(args: Args):
                 action = np.clip(action, -1, 1)
 
                 env.step(action)
-
-                # Sleep to match DROID data collection frequency
-                elapsed_time = time.time() - start_time
-                if elapsed_time < 1 / DROID_CONTROL_FREQUENCY:
-                    time.sleep(1 / DROID_CONTROL_FREQUENCY - elapsed_time)
             except KeyboardInterrupt:
                 break
 
