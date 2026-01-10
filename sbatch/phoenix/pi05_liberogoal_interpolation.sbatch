@@ -1,25 +1,33 @@
 #!/bin/bash
-#SBATCH -J pi05_liberogoal_interpolation_50steps_inter2_1122         # Job name
-#SBATCH -N 1 --ntasks-per-node=8        # Number of nodes and tasks per node
-#SBATCH --gres=gpu:h100:2               # Request 8xH100 GPUs
+#SBATCH -Agts-ylin715-paid
+#SBATCH -J pi05_liberogoal_interpolation_MI_sampled         # Job name
+#SBATCH --gres=gpu:H100:1               # Request how many H100 GPUs per node
+#SBATCH --gpus=H100:1                   # Request how many H100 GPUs, total node will be gpus/gres
+#SBSTCH -q embers
 #SBATCH --mem-per-cpu=128G                # Memory per core
-#SBATCH -t 3:00:00                     # Duration of the job
+#SBATCH -t 4:00:00                     # Duration of the job
 #SBATCH -o ./output/%x-%j.out           # Combined output and error messages file, with job name
 
-cd /storage/home/hcoda1/2/zchen927/openpi  # Change to openpi directory
+# PACE recomeend not setting --ntasks-per-node
 
+BATCH_SIZE=64
+FSDP_DEVICES=1
+EXPT_NAME=liberogoal_pi_interpolation_MI_sampled_0109
+RESUME=False
+
+cd /storage/home/hcoda1/2/zchen927/p-dxu345-0/openpi  # Change to openpi directory
 source $HOME/.local/bin/env # source the uv env
 
 # dataset environment variables
-export OPENPI_DATA_HOME=/storage/scratch1/2/zchen927/assets # set the cache directory (scratch will be deleted every 2 months)
+export OPENPI_DATA_HOME=/storage/home/hcoda1/2/zchen927/p-dxu345-0/openpi/assets # set the cache directory (scratch will be deleted every 2 months)
 export HF_LEROBOT_HOME=/storage/cedar/cedar0/cedarp-dxu345-0/zhenyang/datasets
-export HF_DATASETS_CACHE=/storage/scratch1/2/zchen927/datasets/cache # set the cache directory (scratch will be deleted every 2 months)
+export HF_DATASETS_CACHE=/storage/home/hcoda1/2/zchen927/p-dxu345-0/datasets/cache # set the cache directory (scratch will be deleted every 2 months)
 
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 # train with 95% of GPU memory
 
 uv run scripts/train.py \
-    pi05_libero_cotraining_interpolation_1122 \
-    --exp-name=liberogoal_pi_libero_cotraining_interpolation_50steps_inter2_1122 \
-    --fsdp-devices=2 \
-    --batch-size=128 \
-    --resume
+    pi05_libero_cotraining_interpolation \
+    --exp-name=$EXPT_NAME \
+    --fsdp-devices=$FSDP_DEVICES \
+    --batch-size=$BATCH_SIZE \
+    $(if [ "$RESUME" = "True" ]; then echo "--resume"; fi)

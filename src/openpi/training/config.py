@@ -734,7 +734,7 @@ class TrainConfig:
 
     # If true, will enable wandb logging.
     wandb_enabled: bool = True
-    wandb_entity: str = "anystate-steerability"
+    wandb_entity: str = "rl2-group"
 
     # Used to pass metadata to the policy server.
     policy_metadata: dict[str, Any] | None = None
@@ -1153,7 +1153,8 @@ _CONFIGS = [
         # Each dataset uses its own prompt handling if prompt_from_task is True.
         model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
         data=MultiDatasetLiberoDataConfig(
-            repo_ids=["pi_libero_lerobot", "lerobot_interpolation_30steps_check_1206"],
+            repo_ids=["pi_libero_lerobot", "lerobot_interpolation_step_50_1122_MI_downsample_0109"],
+            # repo_ids=["pi_libero_lerobot", "lerobot_interpolation_30steps_check_1206"],
             # repo_ids=["pi_libero_lerobot", "lerobot_interpolation_30steps_1112"],
             # repo_ids=["pi_libero_lerobot", "lerobot_interpolation_50steps_inter10_1122"],
             # repo_ids=["pi_libero_lerobot", "lerobot_all_task_pairs_step_30_1107_lang"],  # Example: cotrain on multiple datasets
@@ -1164,12 +1165,13 @@ _CONFIGS = [
             extra_delta_transform=False,
             # Use shared normalization stats from a single asset_id
             assets=AssetsConfig(
-                assets_dir="/home/hice1/zchen927/scratch/openpi/assets/pi05_libero/physical-intelligence",
+                # assets_dir="/home/hice1/zchen927/scratch/openpi/assets/pi05_libero/physical-intelligence",
+                assets_dir="/storage/home/hcoda1/2/zchen927/p-dxu345-0/openpi/assets/pi05_libero/physical-intelligence",
                 asset_id="libero",
             ),
         ),
         batch_size=256,
-        num_train_steps=2010,
+        num_train_steps=2000,
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_libero/params"),
         save_interval=2000,
         keep_period=2000,
