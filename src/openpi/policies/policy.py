@@ -96,11 +96,10 @@ class Policy(BasePolicy):
         d_param: int = 4,
         return_debug_data: bool = False,
     ) -> dict:  # type: ignore[misc]
-
         raw_obs = None
         if return_debug_data:
-            raw_obs = jax.tree.map(lambda x: np.array(x) if hasattr(x, '__array__') else x, obs)
-        
+            raw_obs = jax.tree.map(lambda x: np.array(x) if hasattr(x, "__array__") else x, obs)
+
         # Make a copy since transformations may modify the inputs in place.
         inputs = jax.tree.map(lambda x: x, obs)
         if self._is_triton_optimized:
@@ -152,7 +151,7 @@ class Policy(BasePolicy):
                 def to_numpy(x):
                     if hasattr(x, "numpy"):
                         return x.numpy()
-                    elif hasattr(x, "__array__"):
+                    if hasattr(x, "__array__"):
                         return np.asarray(x)
                     return x
 
@@ -167,7 +166,6 @@ class Policy(BasePolicy):
                     debug_data_numpy["raw_obs"] = raw_obs
                 outputs["debug_data"] = debug_data_numpy
         else:
-
             inputs = self._input_transform(inputs)
             if not self._is_pytorch_model:
                 # Make a batch and convert to jax.Array.
@@ -185,7 +183,9 @@ class Policy(BasePolicy):
             sample_kwargs = dict(self._sample_kwargs)
             sample_kwargs["return_debug_data"] = return_debug_data
             if noise is not None:
-                noise = torch.from_numpy(noise).to(self._pytorch_device) if self._is_pytorch_model else jnp.asarray(noise)
+                noise = (
+                    torch.from_numpy(noise).to(self._pytorch_device) if self._is_pytorch_model else jnp.asarray(noise)
+                )
 
                 if noise.ndim == 2:  # If noise is (action_horizon, action_dim), add batch dimension
                     noise = noise[None, ...]  # Make it (1, action_horizon, action_dim)
@@ -231,9 +231,10 @@ class Policy(BasePolicy):
                 def to_numpy(x):
                     if hasattr(x, "numpy"):
                         return x.numpy()
-                    elif hasattr(x, "__array__"):
+                    if hasattr(x, "__array__"):
                         return np.asarray(x)
                     return x
+
                 debug_data_numpy = jax.tree.map(to_numpy, debug_data)
                 # save the final post-processed actions (after unnormalization)
                 debug_data_numpy["final_actions"] = outputs["actions"]
@@ -249,14 +250,13 @@ class Policy(BasePolicy):
         batched_obs = {}
 
         if self._is_triton_optimized:
-            batched_obs = {
+            return {
                 "state": np.stack([obs["observation/state"] for obs in observations], axis=0),
                 "base_0_rgb": np.stack([obs["observation/image"] for obs in observations], axis=0),
                 "left_wrist_0_rgb": np.stack([obs["observation/wrist_image"] for obs in observations], axis=0),
                 "right_wrist_0_rgb": np.stack([obs["observation/wrist_image"] for obs in observations], axis=0),
                 "prompt": np.stack([obs["prompt"] for obs in observations], axis=0),
             }
-            return batched_obs
 
         # FIXME: don't hardcode these values
         keys = (
@@ -296,7 +296,9 @@ class Policy(BasePolicy):
 
         return _model.Observation.from_dict(inputs)
 
-    def infer_batch(self, requests: list[InferRequest], *, noise: np.ndarray | None = None, return_debug_data: bool = False) -> list[InferResponse]:
+    def infer_batch(
+        self, requests: list[InferRequest], *, noise: np.ndarray | None = None, return_debug_data: bool = False
+    ) -> list[InferResponse]:
         """Run inference on a batch of request.
 
         Args:
@@ -311,15 +313,13 @@ class Policy(BasePolicy):
             return []
 
         # Check if any request wants debug data (use per-request flag if available)
-        any_debug_data = return_debug_data or any(
-            getattr(req, 'return_debug_data', False) for req in requests
-        )
+        any_debug_data = return_debug_data or any(getattr(req, "return_debug_data", False) for req in requests)
 
         # Capture raw observations before any transforms (for deterministic replay)
         raw_obs_list = None
         if any_debug_data:
             raw_obs_list = [
-                jax.tree.map(lambda x: np.array(x) if hasattr(x, '__array__') else x, req.observation)
+                jax.tree.map(lambda x: np.array(x) if hasattr(x, "__array__") else x, req.observation)
                 for req in requests
             ]
 
@@ -335,44 +335,42 @@ class Policy(BasePolicy):
 
         if self._is_triton_optimized:
             # Batched Triton inference path - TODO Rohan: can be squashed into Jax batch path once below TODO is resolved
-            
+
             # Prepare kwargs for sample_actions
             sample_kwargs = dict(self._sample_kwargs)
             sample_kwargs["return_debug_data"] = any_debug_data
-            
+
             # Handle batched noise if provided
             if noise is not None:
                 sample_kwargs["noise"] = np.asarray(noise)
-            
+
             start_time = time.monotonic()
             # TODO Rohan: return state_norm since Triton kernels bypass input_transform for internal method. Figure out why input_transform doesn't work
             actions, state_norm, times, debug_data = self._sample_actions(
-                sample_rng_or_pytorch_device, 
-                observation, 
-                **sample_kwargs
+                sample_rng_or_pytorch_device, observation, **sample_kwargs
             )
             times["infer_total"] = time.monotonic() - start_time
-            
+
             # Convert actions to numpy
             actions_np = np.asarray(actions)
-            
+
             # Process each batch element
             results: list[InferResponse] = []
             for i in range(len(requests)):
                 req = requests[i]
-                
+
                 # Extract actions for this batch element
                 action_i = actions_np[i]
-                
+
                 # Extract normalized state for this batch element
                 state_norm_i = state_norm[i]
-                
+
                 result: dict[str, Any] = {"state": state_norm_i, "actions": action_i}
-                
+
                 # Apply the full output transform (including Unnormalize)
                 result = self._output_transform(result)
                 result["policy_timing"] = times
-                
+
                 # Add debug data if requested
                 if any_debug_data or getattr(req, "return_debug_data", False):
                     debug_np: dict[str, Any] = {}
@@ -383,31 +381,34 @@ class Policy(BasePolicy):
                                 debug_np[debug_key] = {}
                                 for subkey, subvalue in debug_value.items():
                                     if isinstance(subvalue, np.ndarray) and len(subvalue.shape) > 0:
-                                        debug_np[debug_key][subkey] = subvalue[i] if subvalue.shape[0] == len(requests) else subvalue
+                                        debug_np[debug_key][subkey] = (
+                                            subvalue[i] if subvalue.shape[0] == len(requests) else subvalue
+                                        )
                                     else:
                                         debug_np[debug_key][subkey] = subvalue
+                            elif isinstance(debug_value, np.ndarray) and len(debug_value.shape) > 0:
+                                debug_np[debug_key] = (
+                                    debug_value[i] if debug_value.shape[0] == len(requests) else debug_value
+                                )
                             else:
-                                if isinstance(debug_value, np.ndarray) and len(debug_value.shape) > 0:
-                                    debug_np[debug_key] = debug_value[i] if debug_value.shape[0] == len(requests) else debug_value
-                                else:
-                                    debug_np[debug_key] = debug_value
-                    
+                                debug_np[debug_key] = debug_value
+
                     debug_np["output_actions"] = action_i
-                    
+
                     # Handle per-request noise
                     req_noise = getattr(req, "noise", None)
                     if req_noise is None and noise is not None:
                         req_noise = noise[i] if noise.ndim == 3 else noise
                     if req_noise is not None:
                         debug_np["noise"] = np.asarray(req_noise)
-                    
+
                     debug_np["final_actions"] = result["actions"]
                     if raw_obs_list is not None:
                         debug_np["raw_obs"] = raw_obs_list[i]
                     result["debug_data"] = debug_np
-                
+
                 results.append(result)
-            
+
             return results
         # Prepare kwargs for sample_actions
         sample_kwargs = dict(self._sample_kwargs)
@@ -446,10 +447,11 @@ class Policy(BasePolicy):
 
             # Add debug data for this batch element if available
             if debug_data is not None:
+
                 def to_numpy(x):
                     if hasattr(x, "numpy"):
                         return x.numpy()
-                    elif hasattr(x, "__array__"):
+                    if hasattr(x, "__array__"):
                         return np.asarray(x)
                     return x
 
@@ -466,11 +468,10 @@ class Policy(BasePolicy):
                                 result_debug[debug_key][subkey] = subvalue[i]
                             else:
                                 result_debug[debug_key][subkey] = subvalue
+                    elif isinstance(debug_value, np.ndarray) and len(debug_value.shape) > 0:
+                        result_debug[debug_key] = debug_value[i]
                     else:
-                        if isinstance(debug_value, np.ndarray) and len(debug_value.shape) > 0:
-                            result_debug[debug_key] = debug_value[i]
-                        else:
-                            result_debug[debug_key] = debug_value
+                        result_debug[debug_key] = debug_value
 
                 # Add final_actions (post-output-transform) for this batch element
                 result_debug["final_actions"] = result["actions"]

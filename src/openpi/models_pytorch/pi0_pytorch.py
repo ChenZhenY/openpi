@@ -1,11 +1,11 @@
 import logging
 import math
+import time as time_module
 
 import torch
 from torch import Tensor
 from torch import nn
 import torch.nn.functional as F  # noqa: N812
-import time as time_module
 
 import openpi.models.gemma as _gemma
 from openpi.models_pytorch.gemma_pytorch import PaliGemmaWithExpertModel
@@ -374,7 +374,14 @@ class PI0Pytorch(nn.Module):
         return F.mse_loss(u_t, v_t, reduction="none")
 
     @torch.no_grad()
-    def sample_actions(self, device, observation, noise=None, num_steps=10, return_debug_data=False) -> tuple[Tensor, dict, dict | None]:
+    def sample_actions(
+        self,
+        device,
+        observation,
+        noise=None,
+        num_steps=10,
+        return_debug_data: bool = False,  # noqa: FBT001, FBT002
+    ) -> tuple[Tensor, dict, dict | None]:
         """Do a full inference forward and compute the action (batch_size x num_steps x num_motors)"""
         times = {}
         debug_data = {} if return_debug_data else None
@@ -386,7 +393,7 @@ class PI0Pytorch(nn.Module):
             }
 
         start = time_module.monotonic()
-        
+
         bsize = observation.state.shape[0]
         if noise is None:
             actions_shape = (bsize, self.config.action_horizon, self.config.action_dim)
@@ -405,7 +412,7 @@ class PI0Pytorch(nn.Module):
         start = time_module.monotonic()
         prefix_embs, prefix_pad_masks, prefix_att_masks = self.embed_prefix(images, img_masks, lang_tokens, lang_masks)
         times["embed_prefix"] = time_module.monotonic() - start
-        
+
         start = time_module.monotonic()
         prefix_att_2d_masks = make_att_2d_masks(prefix_pad_masks, prefix_att_masks)
         prefix_position_ids = torch.cumsum(prefix_pad_masks, dim=1) - 1

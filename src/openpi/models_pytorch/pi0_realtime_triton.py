@@ -1,21 +1,18 @@
+import json
+import os
 import pickle
 
-import os
-import torch
-
-from openpi.models import model as _model
-from openpi.shared.pi0_infer_batched import Pi0InferenceBatched
-
+import einops
+import numpy as np
+from PIL import Image
 import torch
 from torch import Tensor
 from torch import nn
 import torch.nn.functional as F  # noqa: N812
-import numpy as np
 
-from PIL import Image
-import einops
-import json
-import os
+from openpi.models import model as _model
+from openpi.shared.pi0_infer_batched import Pi0InferenceBatched
+
 
 class Pi0TritonPytorch(nn.Module):
     def __init__(self, config, converted_checkpoint_path: str, num_views: int = 2, batch_size: int = 1):
@@ -27,11 +24,11 @@ class Pi0TritonPytorch(nn.Module):
         self.num_views = num_views
 
         self.all_views = ["base_0_rgb", "left_wrist_0_rgb", "right_wrist_0_rgb"]
-        self.visible_views = self.all_views[:self.num_views]
+        self.visible_views = self.all_views[: self.num_views]
 
         norm_stats_dir = os.path.join(os.path.dirname(converted_checkpoint_path), "assets/physical-intelligence/libero")
         self.norm_stats = self._load_norm_stats(norm_stats_dir)
-        
+
         self.policy = self._load_model(converted_checkpoint_path)
 
         self.action_horizon = 50
@@ -40,27 +37,27 @@ class Pi0TritonPytorch(nn.Module):
     def _load_norm_stats(self, norm_stats_dir: str) -> dict:
         norm_stats_path = os.path.join(norm_stats_dir, "norm_stats.json")
         if os.path.exists(norm_stats_path):
-            with open(norm_stats_path, 'r') as f:
-                return json.load(f)['norm_stats']
+            with open(norm_stats_path) as f:
+                return json.load(f)["norm_stats"]
         return None
 
     def _load_model(self, checkpoint_path: str):
-        with open(checkpoint_path, 'rb') as f:
+        with open(checkpoint_path, "rb") as f:
             weights = pickle.load(f)
-        policy = Pi0InferenceBatched(checkpoint=weights, num_views=self.num_views, chunk_size=50, batch_size=self.batch_size)
-        return policy
+        return Pi0InferenceBatched(
+            checkpoint=weights, num_views=self.num_views, chunk_size=50, batch_size=self.batch_size
+        )
 
-    def sample_noise(self, shape, device, is_numpy=False):
+    def sample_noise(self, shape, device, is_numpy=False):  # noqa: FBT002
         if is_numpy:
             return np.random.normal(0.0, 1.0, shape)
-        else:
-            return torch.normal(
-                mean=0.0,
-                std=1.0,
-                size=shape,
-                dtype=torch.float32,
-                device=device,
-            )
+        return torch.normal(
+            mean=0.0,
+            std=1.0,
+            size=shape,
+            dtype=torch.float32,
+            device=device,
+        )
 
     def make_example_actions(self) -> _model.Actions:
         print("Making example actions: ", self.action_horizon, self.action_dim)
@@ -87,7 +84,7 @@ class Pi0TritonPytorch(nn.Module):
         cur_width, cur_height = pil_image.size
         if cur_width == width and cur_height == height:
             return image
-        
+
         ratio = max(cur_width / width, cur_height / height)
         resized_height = int(cur_height / ratio)
         resized_width = int(cur_width / ratio)
@@ -99,8 +96,7 @@ class Pi0TritonPytorch(nn.Module):
         return np.array(zero_image)
 
     def _normalize_image(self, image: np.ndarray) -> np.ndarray:
-        image = image.astype(np.float32) / 255.0 * 2.0 - 1.0
-        return image
+        return image.astype(np.float32) / 255.0 * 2.0 - 1.0
 
     def _normalize_state(self, state: np.ndarray, norm_stats: dict) -> np.ndarray:
         if norm_stats and "state" in norm_stats:
@@ -122,64 +118,61 @@ class Pi0TritonPytorch(nn.Module):
 
     def _resize_with_pad_batch(self, images: np.ndarray, height: int = 224, width: int = 224) -> np.ndarray:
         """Fully vectorized resize with padding for batch of images using PyTorch.
-        
+
         Args:
             images: (batch, H, W, C) array
             height: Target height
             width: Target width
-            
+
         Returns:
             Resized images (batch, height, width, C)
         """
         batch_size, cur_height, cur_width, channels = images.shape
-        
+
         # Quick path: if already correct size
         if cur_height == height and cur_width == width:
             return images
-        
+
         # Convert to torch: BHWC -> BCHW
         images_torch = torch.from_numpy(images).permute(0, 3, 1, 2).float()
-        
+
         # Calculate resize dimensions (maintain aspect ratio)
         ratio = max(cur_width / width, cur_height / height)
         resized_height = int(cur_height / ratio)
         resized_width = int(cur_width / ratio)
-        
+
         # Resize entire batch at once
         resized = F.interpolate(
-            images_torch,
-            size=(resized_height, resized_width),
-            mode='bilinear',
-            align_corners=False
+            images_torch, size=(resized_height, resized_width), mode="bilinear", align_corners=False
         )
-        
+
         # Create padded output (all zeros)
         output = torch.zeros((batch_size, channels, height, width), dtype=resized.dtype, device=resized.device)
-        
+
         # Calculate padding offsets (vectorized)
         pad_height = max(0, (height - resized_height) // 2)
         pad_width = max(0, (width - resized_width) // 2)
-        
+
         # Place resized images in output (all at once)
-        output[:, :, pad_height:pad_height+resized_height, pad_width:pad_width+resized_width] = resized
-        
+        output[:, :, pad_height : pad_height + resized_height, pad_width : pad_width + resized_width] = resized
+
         # Convert back: BCHW -> BHWC
         output = output.permute(0, 2, 3, 1).numpy()
-        
+
         return output.astype(images.dtype)
 
-    def _apply_input_transforms(self, data: dict, action_dim: int = 32, norm_stats: dict = None) -> dict:
+    def _apply_input_transforms(self, data: dict, action_dim: int = 32, norm_stats: dict | None = None) -> dict:
         """Apply input transforms to a batch of observations (vectorized).
-        
+
         Args:
             data: Dict with batched data (batch_size, ...)
             action_dim: Target action dimension
             norm_stats: Normalization statistics
-            
+
         Returns:
             Dict with transformed batched data
         """
-        
+
         # Vectorized state processing
         # Pad all states at once
         current_dim = data["state"].shape[-1]
@@ -188,7 +181,7 @@ class Pi0TritonPytorch(nn.Module):
             states = np.pad(data["state"], pad_width)
         else:
             states = data["state"]
-        
+
         # Vectorized state normalization
         if norm_stats and "state" in norm_stats:
             state_mean = np.array(norm_stats["state"]["mean"])
@@ -196,42 +189,42 @@ class Pi0TritonPytorch(nn.Module):
             state_std = np.array(norm_stats["state"]["std"])
             state_std = self._pad_to_dim(state_std, action_dim)
             states = (states - state_mean[None, :]) / (state_std[None, :] + 1e-6)
-        
+
         # Vectorized image processing
         batch_images = {}
         for view in self.all_views:
             images = data[view]  # (batch, H, W, C) or (batch, C, H, W)
-            
+
             # Parse images (handle BCHW -> BHWC if needed)
             if images.ndim != 4:
                 raise ValueError(f"Expected 4D image tensor, got shape {images.shape}")
-            
+
             # Convert to numpy if torch tensor
-            if hasattr(images, 'numpy'):
+            if hasattr(images, "numpy"):
                 images = images.cpu().numpy()
-            
+
             # Handle different layouts and dtypes
             if np.issubdtype(images.dtype, np.floating):
                 images = (255 * images).astype(np.uint8)
-            
+
             # BCHW -> BHWC conversion if needed
             if images.shape[1] == 3:  # BCHW
                 images = np.transpose(images, (0, 2, 3, 1))
-            
+
             # Resize all images in batch
             images = self._resize_with_pad_batch(images, 224, 224)
-            
+
             # Normalize: vectorized across batch
             images = images.astype(np.float32) / 255.0 * 2.0 - 1.0
-            
+
             batch_images[view] = images
-        
+
         image_mask_dict = {
             "base_0_rgb": np.True_,
             "left_wrist_0_rgb": np.True_,
             "right_wrist_0_rgb": np.False_,
         }
-        
+
         inputs = {
             "state": states,
             "image": batch_images,
@@ -243,14 +236,20 @@ class Pi0TritonPytorch(nn.Module):
 
     # num_steps is unused for compatibility
     @torch.no_grad()
-    def sample_actions(self, device, observation, noise=None, num_steps=10, return_debug_data=False) -> tuple[Tensor, dict, dict | None]:
-
+    def sample_actions(
+        self,
+        device,
+        observation,
+        noise=None,
+        num_steps=10,
+        return_debug_data: bool = False,  # noqa: FBT001, FBT002
+    ) -> tuple[Tensor, dict, dict | None]:
         times = {}
         debug_data = {} if return_debug_data else None
 
         # Get actual batch size from observation
         actual_batch_size = observation["state"].shape[0]
-        
+
         # Check if batch size matches what the model was initialized with
         if actual_batch_size != self.batch_size:
             raise ValueError(
@@ -264,42 +263,48 @@ class Pi0TritonPytorch(nn.Module):
             noise = self.sample_noise(actions_shape, device, is_numpy=True)
 
         transformed_inputs = self._apply_input_transforms(observation, action_dim=32, norm_stats=self.norm_stats)
-        
+
         if debug_data is not None:
             # Save debug data for first batch item only
             debug_data["obs_after_preprocess"] = {
                 "state": np.asarray(transformed_inputs["state"][0], dtype=np.float32),
                 "images": {
                     "base_0_rgb": np.asarray(transformed_inputs["image"]["base_0_rgb"][0], dtype=np.float32)[None, ...],
-                    "left_wrist_0_rgb": np.asarray(transformed_inputs["image"]["left_wrist_0_rgb"][0], dtype=np.float32)[None, ...],
-                    "right_wrist_0_rgb": np.asarray(transformed_inputs["image"]["right_wrist_0_rgb"][0], dtype=np.float32)[None, ...],
+                    "left_wrist_0_rgb": np.asarray(
+                        transformed_inputs["image"]["left_wrist_0_rgb"][0], dtype=np.float32
+                    )[None, ...],
+                    "right_wrist_0_rgb": np.asarray(
+                        transformed_inputs["image"]["right_wrist_0_rgb"][0], dtype=np.float32
+                    )[None, ...],
                 },
             }
-        
+
         # Stack images: (batch, num_views=2, H, W, C)
         images = []
         for view in self.visible_views:
             img = transformed_inputs["image"][view]  # (batch, H, W, C)
             images.append(torch.from_numpy(img))
-        
+
         observation_images = torch.stack(images, dim=1).to(torch.float32)  # (batch, 2, H, W, C)
-        observation_state = torch.from_numpy(transformed_inputs["state"].astype(np.float32)).to(torch.float32)  # (batch, 32)
+        observation_state = torch.from_numpy(transformed_inputs["state"].astype(np.float32)).to(
+            torch.float32
+        )  # (batch, 32)
 
         normalized_observation_images = observation_images.cuda()
         normalized_observation_state = observation_state.cuda()
         diffusion_noise = torch.from_numpy(noise).to(torch.float32).cuda()
-        
+
         # Forward pass through batched policy
         # action shape (batch, action_horizon, action_dim)
         actions = self.policy.forward(normalized_observation_images, normalized_observation_state, diffusion_noise)
-        
+
         # Convert to numpy
         actions = actions.cpu().float().numpy()
-        
+
         if debug_data is not None:
             # Save output for first batch item only
             debug_data["output_actions"] = np.asarray(actions[0])
             if noise is not None:
                 debug_data["noise"] = np.asarray(noise[0])
-        
+
         return actions, transformed_inputs["state"], times, debug_data
