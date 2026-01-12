@@ -207,7 +207,9 @@ def _robot_worker(task_args) -> None:
 def run_robots(args: Args, jobs: List[Job]) -> None:
     counter = multiprocessing.Value("i", 0)  # for assigning robot indices
 
-    with get_progress_manager(args.progress_type, max_steps=args.max_steps) as progress_manager:
+    with get_progress_manager(
+        args.progress_type, max_steps=args.max_steps
+    ) as progress_manager:
         if args.debug:
             init_worker(args, counter, progress_manager.queue)
             for job in jobs:

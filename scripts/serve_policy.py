@@ -122,7 +122,10 @@ def create_policy(args: Args) -> _policy.Policy:
         case Default():
             print(type(args.policy))
             return create_default_policy(
-                args.env, batch_size=args.batch_size, default_prompt=args.default_prompt, sample_kwargs={"num_steps": args.num_steps}
+                args.env,
+                batch_size=args.batch_size,
+                default_prompt=args.default_prompt,
+                sample_kwargs={"num_steps": args.num_steps},
             )
 
 

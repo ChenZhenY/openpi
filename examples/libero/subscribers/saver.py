@@ -15,8 +15,9 @@ from examples.libero.env import LiberoSimEnvironment
 logger = logging.getLogger(__name__)
 
 
-def _flatten_dict(d: Dict[str, Any], parent_key: str = '', sep: str = '/') -> Dict[str, Any]:
-
+def _flatten_dict(
+    d: Dict[str, Any], parent_key: str = "", sep: str = "/"
+) -> Dict[str, Any]:
     items = []
     for k, v in d.items():
         new_key = f"{parent_key}{sep}{k}" if parent_key else k
@@ -136,24 +137,23 @@ class Saver(_subscriber.Subscriber):
         )
 
     def _save_debug_data(self, out_folder: pathlib.Path) -> None:
-
         action_chunks = self._action_chunk_broker.action_chunks
         debug_data_dir = out_folder / "debug_data"
-        
+
         has_debug_data = any(chunk.debug_data for chunk in action_chunks)
         if not has_debug_data:
             logger.debug("No debug data to save")
             return
-            
+
         debug_data_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"Saving debug data to {debug_data_dir}")
-        
+
         for i, chunk in enumerate(action_chunks):
             if not chunk.debug_data:
                 continue
-                
+
             flat_data = _flatten_dict(chunk.debug_data)
-            
+
             chunk_file = debug_data_dir / f"chunk_{i:04d}.npy"
             np.save(chunk_file, flat_data, allow_pickle=True)
             logger.debug(f"Saved debug data for chunk {i} to {chunk_file}")
