@@ -734,7 +734,7 @@ class TrainConfig:
 
     # If true, will enable wandb logging.
     wandb_enabled: bool = True
-    wandb_entity: str = "anystate-steerability"
+    wandb_entity: str = "rl2-group"
 
     # Used to pass metadata to the policy server.
     policy_metadata: dict[str, Any] | None = None
@@ -1145,7 +1145,39 @@ _CONFIGS = [
         optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
         ema_decay=0.999,
     ),
-
+    TrainConfig(
+        name="pi05_libero_cotraining_SRBC",
+        # Example config demonstrating cotraining on multiple Libero datasets.
+        # All datasets share the same transforms and normalization stats (from asset_id).
+        # Each dataset uses its own prompt handling if prompt_from_task is True.
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
+        data=MultiDatasetLiberoDataConfig(
+            repo_ids=["pi_libero_lerobot", "interpolation_50_1122data_SRBC_0110"],
+            # Optional: adjust sampling ratio. [2.0, 1.0] means dataset 0 is sampled twice as often as dataset 1.
+            # If None, uniform sampling is used.
+            dataset_weights=[1.0, 5.0],
+            base_config=DataConfig(prompt_from_task=True),
+            extra_delta_transform=False,
+            # Use shared normalization stats from a single asset_id
+            assets=AssetsConfig(
+                assets_dir="/storage/home/hcoda1/2/zchen927/p-dxu345-0/openpi/assets/pi05_libero/assets/physical-intelligence",
+                asset_id="libero",
+            ),
+        ),
+        batch_size=256,
+        num_train_steps=2000,
+        weight_loader=weight_loaders.CheckpointWeightLoader("/storage/cedar/cedar0/cedarp-dxu345-0/zhenyang/checkpoints/liberogoal_pi_libero_cotraining_interpolation_50steps_1122/2000/params/"),
+        save_interval=1000,
+        keep_period=2000,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=10_000,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+    ),
     TrainConfig(
         name="pi05_libero_cotraining_interpolation",
         # Example config demonstrating cotraining on multiple Libero datasets.
@@ -1153,7 +1185,8 @@ _CONFIGS = [
         # Each dataset uses its own prompt handling if prompt_from_task is True.
         model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
         data=MultiDatasetLiberoDataConfig(
-            repo_ids=["pi_libero_lerobot", "lerobot_interpolation_30steps_check_1206"],
+            repo_ids=["pi_libero_lerobot", "lerobot_interpolation_step_50_1122_MI_downsample_0109"],
+            # repo_ids=["pi_libero_lerobot", "lerobot_interpolation_30steps_check_1206"],
             # repo_ids=["pi_libero_lerobot", "lerobot_interpolation_30steps_1112"],
             # repo_ids=["pi_libero_lerobot", "lerobot_interpolation_50steps_inter10_1122"],
             # repo_ids=["pi_libero_lerobot", "lerobot_all_task_pairs_step_30_1107_lang"],  # Example: cotrain on multiple datasets
@@ -1164,12 +1197,13 @@ _CONFIGS = [
             extra_delta_transform=False,
             # Use shared normalization stats from a single asset_id
             assets=AssetsConfig(
-                assets_dir="/home/hice1/zchen927/scratch/openpi/assets/pi05_libero/physical-intelligence",
+                # assets_dir="/home/hice1/zchen927/scratch/openpi/assets/pi05_libero/physical-intelligence",
+                assets_dir="/storage/home/hcoda1/2/zchen927/p-dxu345-0/openpi/assets/pi05_libero/assets/physical-intelligence",
                 asset_id="libero",
             ),
         ),
         batch_size=256,
-        num_train_steps=2010,
+        num_train_steps=2000,
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_libero/params"),
         save_interval=2000,
         keep_period=2000,
@@ -1242,7 +1276,7 @@ _CONFIGS = [
         batch_size=256,
         num_train_steps=6001,
         # weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_libero/params"), 
-        weight_loader=weight_loaders.CheckpointWeightLoader("/home/hice1/zchen927/scratch/openpi/checkpoints/pi05_libero_cotraining_interpolation_1122/liberogoal_pi_libero_cotraining_interpolation_50steps_1127/3000/paramss"),
+        weight_loader=weight_loaders.CheckpointWeightLoader("/home/hice1/zchen927/scratch/openpi/checkpoints/pi05_libero_cotraining_interpolation_1122/liberogoal_pi_libero_cotraining_interpolation_50steps_1127/3000/params"),
         save_interval=2000,
         keep_period=2000,
         lr_schedule=_optimizer.CosineDecaySchedule(
