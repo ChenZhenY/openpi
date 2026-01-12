@@ -202,7 +202,7 @@ def main():
     from openpi.shared.pi0_infer_batched import Pi0InferenceBatched
 
     with open(
-        "/srv/rl2-lab/flash8/rbansal66/openpi_rollout/openpi/.cache/openpi/openpi-assets/checkpoints/pi0_libero_pytorch_dexmal_mokapots/converted_checkpoint.pkl",
+        "/coc/flash8/rbansal66/openpi_rollout/openpi/.cache/openpi/openpi-assets/checkpoints/pi0_libero_pytorch_dexmal_mokapots/converted_checkpoint.pkl",
         "rb",
     ) as f:
         weights = pickle.load(f)
