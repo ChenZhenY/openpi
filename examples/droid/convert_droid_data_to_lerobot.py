@@ -87,7 +87,7 @@ def main(data_dir: str, *, push_to_hub: bool = False):
 
     # Load language annotations
     # Note: we load the DROID language annotations for this example, but you can manually define them for your own data
-    with (data_dir / "aggregated-annotations-030724.json").open() as f:
+    with (data_dir / "aggregated_instructions.json").open() as f:
         language_annotations = json.load(f)
 
     # Loop over raw DROID fine-tuning datasets and write episodes to the LeRobot dataset
