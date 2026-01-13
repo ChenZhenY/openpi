@@ -27,7 +27,8 @@ from datetime import datetime
 import enum
 import json
 import os
-import subprocess
+import pathlib
+import sys
 import time
 from typing import Any
 import warnings
@@ -39,6 +40,10 @@ from tqdm.asyncio import tqdm
 from openpi.policies.aloha_policy import make_aloha_example
 from openpi.policies.droid_policy import make_droid_example
 from openpi.policies.libero_policy import make_libero_example
+
+# Import shared utilities
+sys.path.insert(0, str(pathlib.Path(__file__).parent))
+from benchmark_utils import get_gpu_info
 
 
 class EnvMode(enum.Enum):
@@ -85,25 +90,7 @@ def get_observation(env: EnvMode) -> dict:
     raise ValueError(f"Unknown environment: {env}")
 
 
-def get_gpu_info() -> dict[str, Any]:
-    """Get GPU information using nvidia-smi."""
-    try:
-        result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=name,driver_version,memory.total", "--format=csv,noheader"],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=5,
-        )
-        gpu_info = result.stdout.strip().split(", ")
-        return {
-            "gpu_available": True,
-            "gpu_name": gpu_info[0],
-            "driver_version": gpu_info[1],
-            "memory_total": gpu_info[2],
-        }
-    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
-        return {"gpu_available": False}
+# Note: get_gpu_info is now imported from benchmark_utils
 
 
 async def get_request(

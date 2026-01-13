@@ -3,7 +3,7 @@ import datetime
 import logging
 import pathlib
 import socket
-from typing import Any
+import sys
 
 import tyro
 
@@ -12,6 +12,11 @@ from openpi.policies import policy_config as _policy_config
 from openpi.policies.policy import EnvMode
 from openpi.serving import websocket_policy_server
 from openpi.training import config as _config
+
+# Import shared utilities
+sys.path.insert(0, str(pathlib.Path(__file__).parent))
+from benchmark_utils import DEFAULT_CHECKPOINT
+from benchmark_utils import create_default_policy
 
 
 @dataclasses.dataclass
@@ -58,53 +63,7 @@ class Args:
     log_dir: str | None = None
 
 
-# Default checkpoints that should be used for each environment.
-DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
-    EnvMode.ALOHA: Checkpoint(
-        config="pi05_aloha",
-        dir="gs://openpi-assets/checkpoints/pi05_base",
-    ),
-    EnvMode.ALOHA_SIM: Checkpoint(
-        config="pi0_aloha_sim",
-        dir="gs://openpi-assets/checkpoints/pi0_aloha_sim",
-    ),
-    EnvMode.DROID: Checkpoint(
-        config="pi05_droid",
-        dir="gs://openpi-assets/checkpoints/pi05_droid",
-    ),
-    EnvMode.LIBERO: Checkpoint(
-        config="pi05_libero",
-        dir="gs://openpi-assets/checkpoints/pi05_libero",
-    ),
-    EnvMode.LIBERO_PI0: Checkpoint(
-        config="pi0_libero",
-        dir="gs://openpi-assets/checkpoints/pi0_libero",
-    ),
-    EnvMode.LIBERO_PYTORCH: Checkpoint(
-        config="pi0_libero",
-        dir="/coc/flash8/rbansal66/openpi_rollout/openpi/.cache/openpi/openpi-assets/checkpoints/pi0_libero_pytorch_openpi",
-    ),
-    EnvMode.LIBERO_REALTIME: Checkpoint(
-        config="pi0_libero",
-        dir="/coc/flash8/rbansal66/openpi_rollout/openpi/.cache/openpi/openpi-assets/checkpoints/pi0_libero_pytorch_dexmal_mokapots",
-    ),
-}
-
-
-def create_default_policy(
-    env: EnvMode, *, batch_size: int = 1, default_prompt: str | None = None, sample_kwargs: dict[str, Any] | None = None
-) -> _policy.Policy:
-    """Create a default policy for the given environment."""
-    if checkpoint := DEFAULT_CHECKPOINT.get(env):
-        return _policy_config.create_trained_policy(
-            _config.get_config(checkpoint.config),
-            checkpoint.dir,
-            default_prompt=default_prompt,
-            sample_kwargs=sample_kwargs,
-            use_triton_optimized=(env == EnvMode.LIBERO_REALTIME),
-            batch_size=batch_size,
-        )
-    raise ValueError(f"Unsupported environment mode: {env}")
+# Note: DEFAULT_CHECKPOINT and create_default_policy are now imported from benchmark_utils
 
 
 def create_policy(args: Args) -> _policy.Policy:
@@ -157,7 +116,7 @@ def main(args: Args) -> None:
             train_config = _config.get_config(args.policy.config)
         case Default():
             if checkpoint := DEFAULT_CHECKPOINT.get(args.env):
-                train_config = _config.get_config(checkpoint.config)
+                train_config = _config.get_config(checkpoint["config"])
             else:
                 raise ValueError(f"Unsupported environment mode: {args.env}")
 
