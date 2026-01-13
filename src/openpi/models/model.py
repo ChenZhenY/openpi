@@ -285,7 +285,9 @@ class BaseModel(nnx.Module, abc.ABC):
     ) -> at.Float[at.Array, "*b ah"]: ...
 
     @abc.abstractmethod
-    def sample_actions(self, rng: at.KeyArrayLike, observation: Observation, **kwargs) -> Actions: ...
+    def sample_actions(
+        self, rng: at.KeyArrayLike, observation: Observation, **kwargs
+    ) -> tuple[Actions, dict, dict | None]: ...
 
     @abc.abstractmethod
     def make_example_actions(self) -> Actions:

@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 import numpy as np
 from typing import Optional, Union
@@ -36,9 +36,12 @@ class InferRequest:
     observation: dict
     infer_type: InferType
     params: Optional[Union[RTCParams, VlashParams, TrainTimeRTCParams]] = None
+    return_debug_data: bool = False
+    noise: Optional[np.ndarray] = None  # optional, noise for deterministic replay
 
 
 @dataclass
 class InferResponse:
     actions: np.ndarray
     times: dict
+    debug_data: Optional[dict] = field(default=None)

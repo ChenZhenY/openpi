@@ -413,10 +413,26 @@ class Pi0(_model.BaseModel):
         prev_action: _model.Actions | None = None,
         s: at.Int[at.Array, " b"] | None = None,
         d: at.Int[at.Array, " b"] | None = None,
+        return_debug_data: bool = False,
         **kwargs,
-    ) -> tuple[_model.Actions, dict[str, float]]:
+    ) -> tuple[_model.Actions, dict[str, float], dict | None]:
         times = {}
+        debug_data = {} if return_debug_data else None
+
+        if return_debug_data:
+            debug_data["obs_before_preprocess"] = {
+                "images": {k: jnp.array(v) for k, v in observation.images.items()},
+                "state": jnp.array(observation.state),
+            }
+
         observation = _model.preprocess_observation(None, observation, train=False)
+
+        # Store observation after preprocessing if debug mode
+        if return_debug_data:
+            debug_data["obs_after_preprocess"] = {
+                "images": {k: jnp.array(v) for k, v in observation.images.items()},
+                "state": jnp.array(observation.state),
+            }
 
         # first fill KV cache with a forward pass of the prefix
         prefix_tokens, prefix_mask, prefix_ar_mask = self.embed_prefix(observation)
@@ -430,6 +446,9 @@ class Pi0(_model.BaseModel):
         if noise is None:
             noise = jax.random.normal(rng, (batch_size, self.action_horizon, self.action_dim))
         assert noise is not None
+
+        if return_debug_data:
+            debug_data["noise"] = jnp.array(noise)
 
         _, kv_cache = self.prefill(prefix_tokens, prefix_attn_mask, positions)
 
@@ -447,7 +466,11 @@ class Pi0(_model.BaseModel):
                 prefix_mask,
             )
 
-        return x_0, times
+        # Store output actions if debug mode
+        if return_debug_data:
+            debug_data["output_actions"] = jnp.array(x_0)
+
+        return x_0, times, debug_data
 
     def make_example_actions(self) -> _model.Actions:
         return jnp.zeros((self.action_horizon, self.action_dim))

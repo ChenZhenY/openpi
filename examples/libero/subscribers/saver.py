@@ -4,7 +4,7 @@ import time
 import imageio
 import numpy as np
 
-from typing import List
+from typing import List, Dict, Any
 from dataclasses import dataclass
 from openpi_client.runtime import subscriber as _subscriber
 from typing_extensions import override
@@ -13,6 +13,19 @@ from examples.libero.schemas import Timestamp, JSONDataclass, ActionChunk
 from examples.libero.env import LiberoSimEnvironment
 
 logger = logging.getLogger(__name__)
+
+
+def _flatten_dict(
+    d: Dict[str, Any], parent_key: str = "", sep: str = "/"
+) -> Dict[str, Any]:
+    items = []
+    for k, v in d.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(_flatten_dict(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
 
 
 @dataclass
@@ -74,6 +87,7 @@ class Saver(_subscriber.Subscriber):
         self._save_timestamps(out_folder)
         self._save_action_chunks(out_folder)
         self._save_video(out_folder)
+        self._save_debug_data(out_folder)
 
     def _get_out_folder(self) -> pathlib.Path:
         robot_folder = self._out_dir / str(self._robot_idx)
@@ -121,3 +135,25 @@ class Saver(_subscriber.Subscriber):
             [np.asarray(x) for x in self._images],
             fps=self._control_hz,  # NOTE: saving in control hz fps for now
         )
+
+    def _save_debug_data(self, out_folder: pathlib.Path) -> None:
+        action_chunks = self._action_chunk_broker.action_chunks
+        debug_data_dir = out_folder / "debug_data"
+
+        has_debug_data = any(chunk.debug_data for chunk in action_chunks)
+        if not has_debug_data:
+            logger.debug("No debug data to save")
+            return
+
+        debug_data_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Saving debug data to {debug_data_dir}")
+
+        for i, chunk in enumerate(action_chunks):
+            if not chunk.debug_data:
+                continue
+
+            flat_data = _flatten_dict(chunk.debug_data)
+
+            chunk_file = debug_data_dir / f"chunk_{i:04d}.npy"
+            np.save(chunk_file, flat_data, allow_pickle=True)
+            logger.debug(f"Saved debug data for chunk {i} to {chunk_file}")

@@ -1,5 +1,6 @@
 import logging
 import math
+import time as time_module
 
 import torch
 from torch import Tensor
@@ -373,23 +374,55 @@ class PI0Pytorch(nn.Module):
         return F.mse_loss(u_t, v_t, reduction="none")
 
     @torch.no_grad()
-    def sample_actions(self, device, observation, noise=None, num_steps=10) -> Tensor:
+    def sample_actions(
+        self,
+        device,
+        observation,
+        noise=None,
+        num_steps=10,
+        return_debug_data: bool = False,  # noqa: FBT001, FBT002
+    ) -> tuple[Tensor, dict, dict | None]:
         """Do a full inference forward and compute the action (batch_size x num_steps x num_motors)"""
+        times = {}
+        debug_data = {} if return_debug_data else None
+
+        if return_debug_data:
+            debug_data["obs_before_preprocess"] = {
+                "images": {k: v.cpu().numpy() for k, v in observation.images.items()},
+                "state": observation.state.cpu().numpy(),
+            }
+
+        start = time_module.monotonic()
+
         bsize = observation.state.shape[0]
         if noise is None:
             actions_shape = (bsize, self.config.action_horizon, self.config.action_dim)
             noise = self.sample_noise(actions_shape, device)
 
         images, img_masks, lang_tokens, lang_masks, state = self._preprocess_observation(observation, train=False)
+        times["preprocess"] = time_module.monotonic() - start
 
+        if return_debug_data:
+            debug_data["obs_after_preprocess"] = {
+                "images": {f"image_{i}": img.cpu().numpy() for i, img in enumerate(images)},
+                "state": state.cpu().numpy(),
+            }
+            debug_data["noise"] = noise.cpu().numpy()
+
+        start = time_module.monotonic()
         prefix_embs, prefix_pad_masks, prefix_att_masks = self.embed_prefix(images, img_masks, lang_tokens, lang_masks)
+        times["embed_prefix"] = time_module.monotonic() - start
+
+        start = time_module.monotonic()
         prefix_att_2d_masks = make_att_2d_masks(prefix_pad_masks, prefix_att_masks)
         prefix_position_ids = torch.cumsum(prefix_pad_masks, dim=1) - 1
 
         # Compute image and language key value cache
         prefix_att_2d_masks_4d = self._prepare_attention_masks_4d(prefix_att_2d_masks)
         self.paligemma_with_expert.paligemma.language_model.config._attn_implementation = "eager"  # noqa: SLF001
+        times["overhead"] = time_module.monotonic() - start
 
+        start = time_module.monotonic()
         _, past_key_values = self.paligemma_with_expert.forward(
             attention_mask=prefix_att_2d_masks_4d,
             position_ids=prefix_position_ids,
@@ -397,7 +430,9 @@ class PI0Pytorch(nn.Module):
             inputs_embeds=[prefix_embs, None],
             use_cache=True,
         )
+        times["prefill"] = time_module.monotonic() - start
 
+        start = time_module.monotonic()
         dt = -1.0 / num_steps
         dt = torch.tensor(dt, dtype=torch.float32, device=device)
 
@@ -416,7 +451,12 @@ class PI0Pytorch(nn.Module):
             # Euler step - use new tensor assignment instead of in-place operation
             x_t = x_t + dt * v_t
             time += dt
-        return x_t
+        times["flow_matching"] = time_module.monotonic() - start
+
+        if return_debug_data:
+            debug_data["output_actions"] = x_t.cpu().numpy()
+
+        return x_t, times, debug_data
 
     def denoise_step(
         self,

@@ -73,6 +73,8 @@ class Runtime:
         logging.info("Episode completed.")
         for subscriber in self._subscribers:
             subscriber.on_episode_end()
+        # TODO: currently a hack, reset agent after subscribers processed the episode data. overall increases calls to reset() to twice
+        self._agent.reset()
 
     def _step(self) -> None:
         """A single step of the runtime loop."""

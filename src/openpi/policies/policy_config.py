@@ -66,6 +66,7 @@ def create_trained_policy(
     pytorch_device: str | None = None,
     use_triton_optimized: bool = False,  # NEW PARAMETER
     num_views: int = 2,  # NEW PARAMETER
+    batch_size: int = 1,
 ) -> _policy.Policy:
     """Create a policy from a trained checkpoint.
 
@@ -81,14 +82,14 @@ def create_trained_policy(
     logging.info("Loading model...")
     if use_triton_optimized:
         # Load the Triton-optimized model
-        from openpi.models import pi0_triton
+        from openpi.models_pytorch import pi0_realtime_triton
 
         converted_checkpoint_path = os.path.join(checkpoint_dir, "converted_checkpoint.pkl")
         if not os.path.exists(converted_checkpoint_path):
             raise ValueError(
                 f"Converted checkpoint not found at {converted_checkpoint_path}. Please run convert_from_jax.py first."
             )
-        model = pi0_triton.Pi0Triton.from_converted_checkpoint(train_config.model, converted_checkpoint_path, num_views)
+        model = pi0_realtime_triton.Pi0TritonPytorch(train_config, converted_checkpoint_path, num_views, batch_size)
         is_pytorch = True
     elif os.path.exists(os.path.join(checkpoint_dir, "model.safetensors")):
         # Standard PyTorch model
@@ -136,5 +137,6 @@ def create_trained_policy(
         sample_kwargs=sample_kwargs,
         metadata=train_config.policy_metadata,
         is_pytorch=is_pytorch,
+        is_triton_optimized=use_triton_optimized,
         pytorch_device=pytorch_device if is_pytorch else None,
     )

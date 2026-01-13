@@ -73,7 +73,7 @@ class Args:
     #################################################################################################################
     # LIBERO environment-specific parameters
     #################################################################################################################
-    task_suite_name: str = "libero_spatial"
+    task_suite_name: str = "libero_10"
     num_steps_wait: int = 10  # Number of steps to wait for objects to stabilize in sim
     num_trials_per_robot: int = 10  # Number of rollouts per robot per task
     max_steps: int = 300  # Maximum number of control steps per episode
@@ -93,6 +93,7 @@ class Args:
     progress_type: Literal["verbose", "concise", "logging", None] = "verbose"
     log_dir: Optional[str] = None
     debug: bool = False  # Run in single process with immediate progress output
+    save_debug_data: bool = False  # Save debug data (obs before/after preprocess, noise, output) to npy files
 
     def create_broker_config(self, policy) -> Union[SyncBrokerConfig, RTCBrokerConfig]:
         """Helper to create the appropriate broker config from args."""
@@ -102,11 +103,13 @@ class Args:
                 action_horizon=self.action_horizon,
                 s_min=self.action_chunk_broker.s_min,
                 d_init=self.action_chunk_broker.d_init,
+                return_debug_data=self.save_debug_data,
             )
         else:  # SYNC
             return SyncBrokerConfig(
                 policy=policy,
                 action_horizon=self.action_horizon,
+                return_debug_data=self.save_debug_data,
             )
 
 
@@ -204,7 +207,9 @@ def _robot_worker(task_args) -> None:
 def run_robots(args: Args, jobs: List[Job]) -> None:
     counter = multiprocessing.Value("i", 0)  # for assigning robot indices
 
-    with get_progress_manager(args.progress_type) as progress_manager:
+    with get_progress_manager(
+        args.progress_type, max_steps=args.max_steps
+    ) as progress_manager:
         if args.debug:
             init_worker(args, counter, progress_manager.queue)
             for job in jobs:
@@ -249,6 +254,8 @@ def create_jobs(args: Args) -> List[Job]:
     jobs: List[Job] = []
     for task_id in range(num_tasks_in_suite):
         task = task_suite.get_task(task_id)
+        if task_id != 8:
+            continue
         all_initial_states = task_suite.get_task_init_states(task_id)
 
         if len(all_initial_states) < args.num_trials_per_robot:

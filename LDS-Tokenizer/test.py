@@ -37,7 +37,7 @@ def denormalize_action_percentile(action_norm, min_val, max_val):
 ## Read state and action data
 state_data = []
 action_data = []
-with h5py.File("/srv/rl2-lab/flash7/zhenyang/data/robomimic-sim/low_dim_v141.hdf5", "r") as f:
+with h5py.File("/coc/flash7/zhenyang/data/robomimic-sim/low_dim_v141.hdf5", "r") as f:
     f_dict = f["data"]
     print(f_dict.keys())
     print(f_dict["demo_0"].keys())
@@ -71,7 +71,7 @@ print(
 test_action_norm = action_norm[10:30, :]
 
 # Set all cache directories before any HF imports
-cache_dir = "/srv/rl2-lab/flash7/zhenyang/.cache"
+cache_dir = "/coc/flash7/zhenyang/.cache"
 os.environ["TRANSFORMERS_CACHE"] = cache_dir
 os.environ["HF_HOME"] = cache_dir
 os.environ["HF_DATASETS_CACHE"] = cache_dir

@@ -15,9 +15,10 @@ class SyncBroker(ActionChunkBroker, _base_policy.BasePolicy):
     The policy is called synchronously in the background thread whenever the current action chunk is exhausted.
     """
 
-    def __init__(self, policy: _base_policy.BasePolicy, action_horizon: int):
+    def __init__(self, policy: _base_policy.BasePolicy, action_horizon: int, return_debug_data: bool = False):
         self._policy = policy
         self._action_horizon = action_horizon
+        self._return_debug_data = return_debug_data
         self._obs: Dict = {}
         self._cur_step: int = -1
 
@@ -31,8 +32,9 @@ class SyncBroker(ActionChunkBroker, _base_policy.BasePolicy):
 
     def _infer(self, obs: Dict, infer_step: int) -> ActionChunk:
         request_timestamp = time.time()
-        response = self._policy.infer(obs)
+        response = self._policy.infer(obs, return_debug_data=self._return_debug_data)
         actions = response["actions"]
+        debug_data = response.get("debug_data", {})
         response_timestamp = time.time()
 
         return ActionChunk(
@@ -40,6 +42,7 @@ class SyncBroker(ActionChunkBroker, _base_policy.BasePolicy):
             request_timestamp=request_timestamp,
             response_timestamp=response_timestamp,
             start_step=infer_step,
+            debug_data=debug_data,
         )
 
     def _background_infer(self):

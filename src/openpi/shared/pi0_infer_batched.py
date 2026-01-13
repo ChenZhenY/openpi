@@ -1310,7 +1310,7 @@ def scaled_matmul_rope_qkv(
 
         if start_j < (num_heads + 1) * head_dim:
             x0, x1 = tl.split(accumulator.reshape(BLOCK_SIZE_M, BLOCK_SIZE_N // 2, 2))
-            x_cossin = tl.load(rope_weights_ptr + offs_i * head_dim + offs_j % head_dim)
+            x_cossin = tl.load(rope_weights_ptr + offs_i * head_dim + offs_j % head_dim, mask=offs_i < seq_len, other=0)
             x_cos, x_sin = tl.split(x_cossin.reshape(BLOCK_SIZE_M, BLOCK_SIZE_N // 2, 2))
             x0_ = x0 * x_cos - x1 * x_sin
             x1_ = x1 * x_cos + x0 * x_sin
@@ -1405,7 +1405,7 @@ def softmax_kernel_mask0(
     pid = tl.program_id(axis=0)
     psize = tl.num_programs(axis=0)
 
-    assert queries <= BLOCK_SIZE, f"BLOCK_SIZE must be >= N, got {BLOCK_SIZE} < {queries}"
+    assert BLOCK_SIZE >= queries, f"BLOCK_SIZE must be >= N, got {BLOCK_SIZE} < {queries}"
 
     for i in range(pid * BLOCK_SIZE_M, queries, psize * BLOCK_SIZE_M):
         offs_i = i + tl.arange(0, BLOCK_SIZE_M)[:, None]
@@ -1514,9 +1514,10 @@ def transformer_decoder(weights, buffers, encoder_seq_len):
         buffers["observation_state_normalized"],
         weights["decoder_state_in_proj_w"],
         weights["decoder_state_in_proj_b"],
-        buffers["decoder_x"][:1],
+        buffers["decoder_state_buf"],
     )
     for step in range(10):
+        buffers["decoder_x"][:1].copy_(buffers["decoder_state_buf"])
         matmul_k_32_1024_bias_silu(
             buffers["diffusion_noise"],
             weights["decoder_action_fused_in_proj_w"],
@@ -1569,6 +1570,236 @@ def pi0_model(weights, buffers, num_views):
     vision_encoder(weights, buffers, num_views)
     transformer_encoder(weights, buffers, encoder_seq_len)
     transformer_decoder(weights, buffers, encoder_seq_len)
+
+
+# ==================== BATCHED VERSIONS ====================
+# Strategy: Batch FFN/matmul operations, but loop over batches for attention
+# (using the fast specialized Triton attention kernels)
+
+
+def vision_encoder_batched(weights, buffers, batch_size, num_views):
+    """Vision encoder - fully batchable since each image is independent."""
+    # Reshape from (batch, num_views, H, W, C) to (batch*num_views, H, W, C)
+    obs_images = buffers["observation_images_normalized"].view(batch_size * num_views, 224, 224, 3)
+    vision_x = buffers["vision_x"].view(batch_size * num_views, 256, 1152)
+    vision_x_norm = buffers["vision_x_norm"].view(batch_size * num_views, 256, 1152)
+    vision_QKV = buffers["vision_QKV"].view(batch_size * num_views, 256, 3456)
+    vision_hidden = buffers["vision_hidden"].view(batch_size * num_views, 256, 4304)
+    vision_split_k = buffers["vision_x_split_k_buf"].view(batch_size * num_views * 256 * 1152 * 4)
+
+    conv2d_embed_n256_1152_res(
+        obs_images,
+        weights["vision_patch_embedding_w"],
+        weights["vision_patch_embedding_b"],
+        weights["vision_position_embedding"],
+        vision_x,
+    )
+
+    for i in range(27):
+        layer_norm_QKV_matmul_n256_1152_3456_bias(
+            vision_x,
+            weights["vision_pre_attn_norm_w"][i],
+            weights["vision_pre_attn_norm_b"][i],
+            weights["vision_attn_qkv_w"][i],
+            weights["vision_attn_qkv_b"][i],
+            vision_QKV,
+            vision_x_norm,
+        )
+
+        # Vision attention can be fully batched (no cross-batch dependencies)
+        attn = AttnMultiKey(vision_QKV)
+
+        matmul_n256_1152_1152_bias_res(
+            attn, weights["vision_attn_o_w"][i], weights["vision_attn_o_b"][i], vision_x, vision_x, vision_split_k
+        )
+
+        layer_norm_matmul_n256_1152_4304_bias_gelu(
+            vision_x,
+            weights["vision_pre_ffn_norm_w"][i],
+            weights["vision_pre_ffn_norm_b"][i],
+            weights["vision_ffn_up_w"][i],
+            weights["vision_ffn_up_b"][i],
+            vision_hidden,
+            vision_x_norm,
+        )
+
+        matmul_n256_4304_1152_bias_res(
+            vision_hidden,
+            weights["vision_ffn_down_w"][i],
+            weights["vision_ffn_down_b"][i],
+            vision_x,
+            vision_x,
+            vision_split_k,
+        )
+
+
+def transformer_encoder_batched(weights, buffers, batch_size, encoder_seq_len):
+    """Encoder: batch FFN, loop over batches for attention (uses fast Triton kernels)."""
+    num_views = buffers["vision_x"].shape[1]
+    vision_tokens_per_batch = num_views * 256
+
+    # Reshaped views for batched operations
+    encoder_x_flat = buffers["encoder_x"].view(batch_size * encoder_seq_len, 2048)
+    encoder_x_norm_flat = buffers["encoder_x_norm"].view(batch_size * encoder_seq_len, 2048)
+    encoder_Q_flat = buffers["encoder_Q"].view(batch_size * encoder_seq_len * 8, 256)
+    encoder_hidden_flat = buffers["encoder_hidden"].view(batch_size * encoder_seq_len, 16384)
+
+    # Project vision tokens - must be done per-batch because encoder_x includes prompt tokens
+    # and batching would misalign the output layout
+    for b in range(batch_size):
+        vision_x_b = buffers["vision_x"][b]  # (num_views, 256, 1152)
+        vision_x_norm_b = buffers["vision_x_norm"][b]  # (num_views, 256, 1152)
+        encoder_x_vision_b = buffers["encoder_x"][b, :vision_tokens_per_batch]  # (num_views*256, 2048)
+
+        layer_norm_matmul_n256_1152_2048_bias(
+            vision_x_b,
+            weights["vision_final_norm_w"],
+            weights["vision_final_norm_b"],
+            weights["encoder_multi_modal_projector_w"],
+            weights["encoder_multi_modal_projector_b"],
+            encoder_x_vision_b,
+            vision_x_norm_b,
+        )
+
+    for i in range(18):
+        # Attention: loop over batches (uses fast specialized Triton kernels)
+        for b in range(batch_size):
+            encoder_x_b = buffers["encoder_x"][b]
+            encoder_x_norm_b = buffers["encoder_x_norm"][b]
+            encoder_Q_b = buffers["encoder_Q"][b]
+
+            rms_matmul_n_2048_2560_qkv_rope(
+                encoder_x_b,
+                weights["encoder_attn_qkv_w"][i],
+                buffers["encoder_rope_weights"],
+                encoder_Q_b,
+                buffers["encoder_K"][b, i, :encoder_seq_len],
+                buffers["encoder_V"][b, i, :encoder_seq_len],
+                encoder_x_norm_b,
+            )
+
+            if i != 17:
+                scale = 1.0 / (256**0.5)
+                attn = AttnSingleKey(
+                    encoder_Q_b,
+                    buffers["encoder_K"][b, i, :encoder_seq_len],
+                    buffers["encoder_V"][b, i, :encoder_seq_len],
+                    scale,
+                )
+                matmul_n_2048_2048_res(attn, weights["encoder_attn_o_w"][i], encoder_x_b)
+
+        if i != 17:
+            # FFN: batched across all examples
+            rms_matmul_n_2048_16384_gate(
+                encoder_x_flat,
+                weights["encoder_ffn_gate_w"][i],
+                weights["encoder_ffn_up_w"][i],
+                encoder_hidden_flat,
+                encoder_x_norm_flat,
+            )
+            matmul_n_16384_2048_res(encoder_hidden_flat, weights["encoder_ffn_down_w"][i], encoder_x_flat)
+
+
+def transformer_decoder_batched(weights, buffers, batch_size, encoder_seq_len):
+    """Decoder: batch FFN, loop over batches for attention (uses fast Triton kernels)."""
+    decoder_seq_len = buffers["decoder_x"].shape[1]
+    chunk_size = decoder_seq_len - 1
+
+    # Reshaped views for batched operations
+    decoder_x_flat = buffers["decoder_x"].view(batch_size * decoder_seq_len, 1024)
+    decoder_norm_factor_flat = buffers["decoder_norm_factor_buf"].view(batch_size * decoder_seq_len)
+    decoder_hidden_flat = buffers["decoder_hidden"].view(batch_size * decoder_seq_len, 4096)
+    diffusion_noise_flat = buffers["diffusion_noise"].view(batch_size * chunk_size, 32)
+
+    # Dedicated buffers for action tokens (completely separate memory from decoder_x)
+    decoder_x_actions_flat = buffers["decoder_x_actions"].view(batch_size * chunk_size, 1024)
+    decoder_norm_factor_actions_flat = buffers["decoder_norm_factor_actions"].view(batch_size * chunk_size)
+
+    # State initialization - per batch (single token)
+    for b in range(batch_size):
+        matmul_1_32_1024_bias(
+            buffers["observation_state_normalized"][b],
+            weights["decoder_state_in_proj_w"],
+            weights["decoder_state_in_proj_b"],
+            buffers["decoder_state_buf"][b],
+        )
+
+    for step in range(10):
+        # Copy state to first decoder token for each batch element
+        buffers["decoder_x"][:, :1].copy_(buffers["decoder_state_buf"].unsqueeze(1))
+
+        # Action embedding: batched
+        matmul_k_32_1024_bias_silu(
+            diffusion_noise_flat,
+            weights["decoder_action_fused_in_proj_w"],
+            weights["decoder_action_fused_time_biases"][step % 10],
+            buffers["decoder_x_buf"].view(batch_size * chunk_size, 1024),
+        )
+        matmul_k_1024_1024_bias(
+            buffers["decoder_x_buf"].view(batch_size * chunk_size, 1024),
+            weights["decoder_action_mlp_w"],
+            weights["decoder_action_mlp_b"],
+            decoder_x_actions_flat,  # Write to dedicated action buffer
+        )
+
+        # SYNC: Copy action embeddings to decoder_x for attention to read
+        buffers["decoder_x"][:, 1:].copy_(buffers["decoder_x_actions"])
+
+        for i in range(18):
+            # Attention: loop over batches (uses fast specialized Triton kernels)
+            for b in range(batch_size):
+                decoder_x_b = buffers["decoder_x"][b]
+                decoder_norm_factor_b = buffers["decoder_norm_factor_buf"][b]
+                decoder_q_buf_b = buffers["decoder_q_buf"][b]
+                decoder_attn_buf_b = buffers["decoder_attn_buf"][b]
+
+                rms_matmul_k_1024_2560_qkv_rope(
+                    decoder_x_b,
+                    weights["decoder_attn_qkv_w"][i],
+                    buffers["decoder_rope_weights"],
+                    decoder_q_buf_b,
+                    buffers["encoder_K"][b, i, encoder_seq_len:],
+                    buffers["encoder_V"][b, i, encoder_seq_len:],
+                    decoder_norm_factor_b,
+                )
+
+                # Fast specialized Triton attention kernel
+                matmul_k8_256_n_softmax_mask0(
+                    decoder_q_buf_b, buffers["encoder_K"][b, i], decoder_attn_buf_b, encoder_seq_len
+                )
+                matmul_k8_n_256(decoder_attn_buf_b, buffers["encoder_V"][b, i], decoder_q_buf_b)
+
+                matmul_k_2048_1024_res(decoder_q_buf_b.view(-1, 2048), weights["decoder_attn_o_w"][i], decoder_x_b)
+
+            # FFN: batched across all examples
+            rms_matmul_k_1024_4096_gate(
+                decoder_x_flat,
+                weights["decoder_ffn_gate_w"][i],
+                weights["decoder_ffn_up_w"][i],
+                decoder_hidden_flat,
+                decoder_norm_factor_flat,
+            )
+            matmul_k_4096_1024_res(decoder_hidden_flat, weights["decoder_ffn_down_w"][i], decoder_x_flat)
+
+        # SYNC: Copy updated action tokens from decoder_x to dedicated buffer for final projection
+        buffers["decoder_x_actions"].copy_(buffers["decoder_x"][:, 1:])
+        buffers["decoder_norm_factor_actions"].copy_(buffers["decoder_norm_factor_buf"][:, 1:])
+
+        # Final projection: batched
+        rms_matmul_k_1024_32_bias_res(
+            decoder_x_actions_flat,
+            weights["decoder_action_fused_out_proj_w"],
+            weights["decoder_action_fused_out_proj_b"],
+            diffusion_noise_flat,
+            decoder_norm_factor_actions_flat,
+        )
+
+
+def pi0_model_batched(weights, buffers, batch_size, num_views):
+    encoder_seq_len = buffers["encoder_x"].shape[1]
+    vision_encoder_batched(weights, buffers, batch_size, num_views)
+    transformer_encoder_batched(weights, buffers, batch_size, encoder_seq_len)
+    transformer_decoder_batched(weights, buffers, batch_size, encoder_seq_len)
 
 
 class Pi0Inference:
@@ -1640,7 +1871,8 @@ class Pi0Inference:
             "encoder_hidden": torch.empty(encoder_seq_len, 16384, dtype=torch.bfloat16, device="cuda"),
             "decoder_rope_weights": torch.empty(decoder_seq_len, 256, dtype=torch.bfloat16, device="cuda"),
             "decoder_x": torch.empty((decoder_seq_len, 1024), dtype=torch.bfloat16, device="cuda"),
-            "decoder_x_buf": torch.empty((decoder_seq_len, 1024), dtype=torch.bfloat16, device="cuda"),
+            "decoder_x_buf": torch.empty((chunk_size, 1024), dtype=torch.bfloat16, device="cuda"),
+            "decoder_state_buf": torch.empty((1, 1024), dtype=torch.bfloat16, device="cuda"),
             "decoder_norm_factor_buf": torch.empty((decoder_seq_len,), dtype=torch.bfloat16, device="cuda"),
             "decoder_q_buf": torch.empty((decoder_seq_len * 8, 256), dtype=torch.bfloat16, device="cuda"),
             "decoder_attn_buf": torch.empty(
@@ -1684,6 +1916,156 @@ class Pi0Inference:
             self.infer_graph.capture_end()
 
     def forward(self, observation_images_normalized, observation_state_normalized, diffusion_noise):
+        self.buffers["observation_images_normalized"].copy_(observation_images_normalized)
+        self.buffers["observation_state_normalized"].copy_(observation_state_normalized)
+        self.buffers["diffusion_noise"].copy_(diffusion_noise)
+        self.infer_graph.replay()
+        return self.buffers["diffusion_noise"]
+
+
+class Pi0InferenceBatched:
+    """Batched version of Pi0Inference - batches FFN ops, loops attention."""
+
+    def __init__(self, checkpoint, num_views, chunk_size, batch_size):
+        self.num_views = num_views
+        self.chunk_size = chunk_size
+        self.batch_size = batch_size
+        encoded_prompt = checkpoint["language_embeds"]
+        self.prompt_len = len(encoded_prompt)
+
+        # Weights are shared across batch (same as single-batch version)
+        self.weights = {
+            "vision_patch_embedding_w": torch.empty(14, 14, 3, 1152, dtype=torch.bfloat16, device="cuda"),
+            "vision_patch_embedding_b": torch.empty(1152, dtype=torch.bfloat16, device="cuda"),
+            "vision_position_embedding": torch.empty(256, 1152, dtype=torch.bfloat16, device="cuda"),
+            "vision_attn_qkv_w": torch.empty(27, 1152, 3 * 1152, dtype=torch.bfloat16, device="cuda"),
+            "vision_attn_qkv_b": torch.empty(27, 3 * 1152, dtype=torch.bfloat16, device="cuda"),
+            "vision_attn_o_w": torch.empty(27, 1152, 1152, dtype=torch.bfloat16, device="cuda"),
+            "vision_attn_o_b": torch.empty(27, 1152, dtype=torch.bfloat16, device="cuda"),
+            "vision_ffn_up_w": torch.empty(27, 1152, 4304, dtype=torch.bfloat16, device="cuda"),
+            "vision_ffn_up_b": torch.empty(27, 4304, dtype=torch.bfloat16, device="cuda"),
+            "vision_ffn_down_w": torch.empty(27, 4304, 1152, dtype=torch.bfloat16, device="cuda"),
+            "vision_ffn_down_b": torch.empty(27, 1152, dtype=torch.bfloat16, device="cuda"),
+            "vision_pre_attn_norm_w": torch.empty(27, 1152, dtype=torch.bfloat16, device="cuda"),
+            "vision_pre_attn_norm_b": torch.empty(27, 1152, dtype=torch.bfloat16, device="cuda"),
+            "vision_pre_ffn_norm_w": torch.empty(27, 1152, dtype=torch.bfloat16, device="cuda"),
+            "vision_pre_ffn_norm_b": torch.empty(27, 1152, dtype=torch.bfloat16, device="cuda"),
+            "vision_final_norm_w": torch.empty(1152, dtype=torch.bfloat16, device="cuda"),
+            "vision_final_norm_b": torch.empty(1152, dtype=torch.bfloat16, device="cuda"),
+            "encoder_multi_modal_projector_w": torch.empty(1152, 2048, dtype=torch.bfloat16, device="cuda"),
+            "encoder_multi_modal_projector_b": torch.empty(2048, dtype=torch.bfloat16, device="cuda"),
+            "encoder_attn_qkv_w": torch.empty(18, 2048, 2560, dtype=torch.bfloat16, device="cuda"),
+            "encoder_attn_o_w": torch.empty(18, 2048, 2048, dtype=torch.bfloat16, device="cuda"),
+            "encoder_ffn_gate_w": torch.empty(18, 2048, 16384, dtype=torch.bfloat16, device="cuda"),
+            "encoder_ffn_up_w": torch.empty(18, 2048, 16384, dtype=torch.bfloat16, device="cuda"),
+            "encoder_ffn_down_w": torch.empty(18, 16384, 2048, dtype=torch.bfloat16, device="cuda"),
+            "decoder_state_in_proj_w": torch.empty(32, 1024, dtype=torch.bfloat16, device="cuda"),
+            "decoder_state_in_proj_b": torch.empty(1024, dtype=torch.bfloat16, device="cuda"),
+            "decoder_action_fused_in_proj_w": torch.empty(32, 1024, dtype=torch.bfloat16, device="cuda"),
+            "decoder_action_fused_time_biases": torch.empty(10, 1024, dtype=torch.bfloat16, device="cuda"),
+            "decoder_action_mlp_w": torch.empty(1024, 1024, dtype=torch.bfloat16, device="cuda"),
+            "decoder_action_mlp_b": torch.empty(1024, dtype=torch.bfloat16, device="cuda"),
+            "decoder_attn_qkv_w": torch.empty(18, 1024, 2560, dtype=torch.bfloat16, device="cuda"),
+            "decoder_attn_o_w": torch.empty(18, 2048, 1024, dtype=torch.bfloat16, device="cuda"),
+            "decoder_ffn_gate_w": torch.empty(18, 1024, 4096, dtype=torch.bfloat16, device="cuda"),
+            "decoder_ffn_up_w": torch.empty(18, 1024, 4096, dtype=torch.bfloat16, device="cuda"),
+            "decoder_ffn_down_w": torch.empty(18, 4096, 1024, dtype=torch.bfloat16, device="cuda"),
+            "decoder_action_fused_out_proj_w": torch.empty(1024, 32, dtype=torch.bfloat16, device="cuda"),
+            "decoder_action_fused_out_proj_b": torch.empty(32, dtype=torch.bfloat16, device="cuda"),
+            "language_embeds": torch.empty(self.prompt_len, 2048, dtype=torch.bfloat16, device="cuda"),
+        }
+
+        encoder_seq_len = num_views * 256 + self.prompt_len
+        decoder_seq_len = chunk_size + 1
+
+        # Buffers matching pi0_infer.py layout
+        self.buffers = {
+            "observation_images_normalized": torch.empty(
+                batch_size, num_views, 224, 224, 3, dtype=torch.bfloat16, device="cuda"
+            ),
+            "observation_state_normalized": torch.empty(batch_size, 32, dtype=torch.bfloat16, device="cuda"),
+            "diffusion_noise": torch.empty(batch_size, chunk_size, 32, dtype=torch.bfloat16, device="cuda"),
+            "vision_x": torch.empty(batch_size, num_views, 256, 1152, dtype=torch.bfloat16, device="cuda"),
+            "vision_x_norm": torch.empty(batch_size, num_views, 256, 1152, dtype=torch.bfloat16, device="cuda"),
+            "vision_QKV": torch.empty(batch_size, num_views, 256, 3 * 1152, dtype=torch.bfloat16, device="cuda"),
+            "vision_hidden": torch.empty(batch_size, num_views, 256, 4304, dtype=torch.bfloat16, device="cuda"),
+            "vision_x_split_k_buf": torch.empty(
+                batch_size, num_views * 256 * 1152 * 4, dtype=torch.float32, device="cuda"
+            ),
+            "encoder_rope_weights": torch.empty(encoder_seq_len, 256, dtype=torch.bfloat16, device="cuda"),
+            "encoder_x": torch.empty(batch_size, encoder_seq_len, 2048, dtype=torch.bfloat16, device="cuda"),
+            "encoder_x_norm": torch.empty(batch_size, encoder_seq_len, 2048, dtype=torch.bfloat16, device="cuda"),
+            "encoder_K": torch.empty(
+                batch_size, 18, encoder_seq_len + decoder_seq_len, 256, dtype=torch.bfloat16, device="cuda"
+            ),
+            "encoder_V": torch.empty(
+                batch_size, 18, encoder_seq_len + decoder_seq_len, 256, dtype=torch.bfloat16, device="cuda"
+            ),
+            "encoder_Q": torch.empty(batch_size, encoder_seq_len * 8, 256, dtype=torch.bfloat16, device="cuda"),
+            "encoder_hidden": torch.empty(batch_size, encoder_seq_len, 16384, dtype=torch.bfloat16, device="cuda"),
+            "decoder_rope_weights": torch.empty(decoder_seq_len, 256, dtype=torch.bfloat16, device="cuda"),
+            "decoder_x": torch.empty(batch_size, decoder_seq_len, 1024, dtype=torch.bfloat16, device="cuda"),
+            "decoder_x_buf": torch.empty(batch_size, chunk_size, 1024, dtype=torch.bfloat16, device="cuda"),
+            "decoder_x_actions": torch.empty(
+                batch_size, chunk_size, 1024, dtype=torch.bfloat16, device="cuda"
+            ),  # Separate buffer for action tokens
+            "decoder_state_buf": torch.empty(batch_size, 1024, dtype=torch.bfloat16, device="cuda"),
+            "decoder_norm_factor_buf": torch.empty(batch_size, decoder_seq_len, dtype=torch.bfloat16, device="cuda"),
+            "decoder_norm_factor_actions": torch.empty(
+                batch_size, chunk_size, dtype=torch.bfloat16, device="cuda"
+            ),  # Separate buffer for action norm factors
+            "decoder_q_buf": torch.empty(batch_size, decoder_seq_len * 8, 256, dtype=torch.bfloat16, device="cuda"),
+            "decoder_attn_buf": torch.empty(
+                batch_size, decoder_seq_len * 8, encoder_seq_len + decoder_seq_len, dtype=torch.bfloat16, device="cuda"
+            ),
+            "decoder_hidden": torch.empty(batch_size, decoder_seq_len, 4096, dtype=torch.bfloat16, device="cuda"),
+            "decode_split_k_buf": torch.empty(batch_size, 2, decoder_seq_len, 1024, dtype=torch.float32, device="cuda"),
+        }
+
+        # Compute rope weights (shared across batches)
+        position_ids = torch.arange(encoder_seq_len, device="cuda")
+        inv_freq = 1.0 / (10000 ** (torch.arange(0, 256, 2, dtype=torch.float32, device="cuda") / 256))
+        k_phase = inv_freq[None, :] * position_ids[:, None]
+        k_cos = torch.cos(k_phase).to(torch.bfloat16)
+        k_sin = torch.sin(k_phase).to(torch.bfloat16)
+        self.buffers["encoder_rope_weights"].copy_(torch.cat([k_cos[:, :, None], k_sin[:, :, None]], 2).view(-1, 256))
+
+        position_ids = torch.arange(decoder_seq_len, device="cuda") + encoder_seq_len
+        k_phase = inv_freq[None, :] * position_ids[:, None]
+        k_cos = torch.cos(k_phase).to(torch.bfloat16)
+        k_sin = torch.sin(k_phase).to(torch.bfloat16)
+        self.buffers["decoder_rope_weights"].copy_(torch.cat([k_cos[:, :, None], k_sin[:, :, None]], 2).view(-1, 256))
+
+        for k, v in checkpoint.items():
+            self.weights[k].copy_(v)
+
+        self.infer_graph = torch.cuda.CUDAGraph()
+        self.record_infer_graph()
+
+    def record_run(self):
+        # Copy language embeds for all batch elements
+        for b in range(self.batch_size):
+            self.buffers["encoder_x"][b, self.num_views * 256 :].copy_(self.weights["language_embeds"])
+        pi0_model_batched(self.weights, self.buffers, self.batch_size, self.num_views)
+
+    def record_infer_graph(self):
+        for i in range(3):
+            self.record_run()
+        stream = torch.cuda.Stream()
+        with torch.cuda.stream(stream):
+            self.infer_graph.capture_begin()
+            self.record_run()
+            self.infer_graph.capture_end()
+
+    def forward(self, observation_images_normalized, observation_state_normalized, diffusion_noise):
+        """
+        Args:
+            observation_images_normalized: (batch, num_views, 224, 224, 3)
+            observation_state_normalized: (batch, 32)
+            diffusion_noise: (batch, chunk_size, 32)
+        Returns:
+            actions: (batch, chunk_size, 32)
+        """
         self.buffers["observation_images_normalized"].copy_(observation_images_normalized)
         self.buffers["observation_state_normalized"].copy_(observation_state_normalized)
         self.buffers["diffusion_noise"].copy_(diffusion_noise)

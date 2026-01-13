@@ -14,6 +14,7 @@ class SyncBrokerConfig:
 
     policy: _base_policy.BasePolicy
     action_horizon: int
+    return_debug_data: bool = False
 
 
 @dataclass

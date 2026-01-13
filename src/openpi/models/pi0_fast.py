@@ -240,7 +240,8 @@ class Pi0FAST(_model.BaseModel):
         *,
         max_decoding_steps: int | at.Int[at.Array, ""] = 256,
         temperature: float = 0.0,
-    ) -> _model.Actions:
+        return_debug_data: bool = False,
+    ) -> tuple[_model.Actions, dict, dict | None]:
         # TODO: this is a hack to get the image keys.
         observation = _model.preprocess_observation(
             None, observation, train=False, image_keys=list(observation.images.keys())
@@ -310,7 +311,8 @@ class Pi0FAST(_model.BaseModel):
         _, _, output_tokens, _, _, _ = jax.lax.while_loop(
             cond, step, (rng, last_logit, output_tokens, kv_cache, False, 0)
         )
-        return output_tokens
+        # TODO: Pi0FAST doesn't support debug data yet
+        return output_tokens, {}, None
 
     def save_data(self) -> None:
         """Save collected data (placeholder for JAX model).
