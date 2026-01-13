@@ -60,7 +60,6 @@ class Pi0TritonPytorch(nn.Module):
         )
 
     def make_example_actions(self) -> _model.Actions:
-        print("Making example actions: ", self.action_horizon, self.action_dim)
         return torch.zeros((self.action_horizon, self.action_dim))
 
     def _parse_image(self, image) -> np.ndarray:

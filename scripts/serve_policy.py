@@ -1,8 +1,6 @@
 import dataclasses
 import datetime
-import logging
 import pathlib
-import socket
 import sys
 
 import tyro
@@ -11,6 +9,7 @@ from openpi.policies import policy as _policy
 from openpi.policies import policy_config as _policy_config
 from openpi.policies.policy import EnvMode
 from openpi.serving import websocket_policy_server
+from openpi.shared import logging_config
 from openpi.training import config as _config
 
 # Import shared utilities
@@ -60,7 +59,7 @@ class Args:
     num_steps: int = 10
 
     # Log directory to save the logs to.
-    log_dir: str | None = None
+    log_dir: str = "logs/server"
 
 
 def create_policy(args: Args) -> _policy.Policy:
@@ -86,15 +85,12 @@ def create_policy(args: Args) -> _policy.Policy:
 
 
 def main(args: Args) -> None:
-    if args.log_dir is not None:
-        log_path = (
-            pathlib.Path(args.log_dir)
-            / f"serve_policy_{datetime.datetime.now(tz=datetime.UTC).strftime('%Y%m%d_%H%M%S')}.log"
-        )
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        logging.basicConfig(level=logging.INFO, datefmt="[%X]", force=True, filename=log_path)
-    else:
-        logging.basicConfig(level=logging.INFO, datefmt="[%X]", force=True)
+    log_path = (
+        pathlib.Path(args.log_dir)
+        / f"serve_policy_{datetime.datetime.now(tz=datetime.UTC).strftime('%Y%m%d_%H%M%S')}.log"
+    )
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    logging_config.setup_logging(log_path=log_path)
 
     # Create policy factory to avoid CUDA context fork issues
     def policy_factory():
@@ -123,16 +119,13 @@ def main(args: Args) -> None:
     policy_metadata["env"] = args.env.value
     policy_metadata["batch_size"] = args.batch_size
 
-    hostname = socket.gethostname()
-    local_ip = socket.gethostbyname(hostname)
-    logging.info("Creating server (host: %s, ip: %s)", hostname, local_ip)
-
     server = websocket_policy_server.WebsocketPolicyServer(
         policy_factory=policy_factory,
         host="0.0.0.0",
         port=args.port,
         metadata=policy_metadata,
         batch_size=args.batch_size,
+        log_dir=args.log_dir,
     )
     server.serve_forever()
 
