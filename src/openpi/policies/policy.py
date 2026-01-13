@@ -80,7 +80,9 @@ class Policy(BasePolicy):
             self._model.eval()
         else:
             self._rng = rng or jax.random.key(0)
-            self._model.sample_actions = nnx_utils.module_jit(self._model.sample_actions)
+            self._model.sample_actions = nnx_utils.module_jit(
+                self._model.sample_actions, static_argnames=["return_debug_data", "use_rtc"]
+            )
         self._sample_actions = model.sample_actions
 
     @override
