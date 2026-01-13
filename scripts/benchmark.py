@@ -27,6 +27,7 @@ from datetime import datetime
 import enum
 import json
 import os
+import subprocess
 import time
 from typing import Any
 import warnings
@@ -82,6 +83,27 @@ def get_observation(env: EnvMode) -> dict:
         return make_libero_example()
 
     raise ValueError(f"Unknown environment: {env}")
+
+
+def get_gpu_info() -> dict[str, Any]:
+    """Get GPU information using nvidia-smi."""
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name,driver_version,memory.total", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=5,
+        )
+        gpu_info = result.stdout.strip().split(", ")
+        return {
+            "gpu_available": True,
+            "gpu_name": gpu_info[0],
+            "driver_version": gpu_info[1],
+            "memory_total": gpu_info[2],
+        }
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        return {"gpu_available": False}
 
 
 async def get_request(
@@ -255,8 +277,17 @@ async def benchmark(
     # Calculate metrics
     metrics = calculate_metrics(outputs, benchmark_duration, num_requests, selected_percentiles)
 
+    # Get GPU info
+    gpu_info = get_gpu_info()
+
     # Print results
     print("{s:{c}^{n}}".format(s=" Benchmark Results ", n=50, c="="))
+    if gpu_info.get("gpu_available"):
+        print("{:<40} {:<10}".format("GPU:", gpu_info["gpu_name"]))
+        print("{:<40} {:<10}".format("Driver version:", gpu_info["driver_version"]))
+        print("{:<40} {:<10}".format("GPU memory:", gpu_info["memory_total"]))
+    else:
+        print("{:<40} {:<10}".format("GPU:", "Not available"))
     print("{:<40} {:<10}".format("Total requests:", metrics.total_requests))
     print("{:<40} {:<10}".format("Successful requests:", metrics.completed))
     print("{:<40} {:<10}".format("Failed requests:", metrics.total_requests - metrics.completed))
@@ -295,6 +326,7 @@ async def benchmark(
         "arrival_times": arrival_times,
         "errors": [o.error for o in outputs if not o.success],
         "policy_timing": [o.outputs["policy_timing"] for o in outputs if o.success],
+        "gpu_info": gpu_info,
     }
 
     return result
