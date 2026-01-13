@@ -9,7 +9,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=6
 #SBATCH --mem=128G
-#SBATCH --gres=gpu:l40s:1
+#SBATCH --gres=gpu:a40:1
 
 # Exit on error
 set -e  
@@ -79,5 +79,5 @@ for REQUEST_RATE in ${REQUEST_RATES[@]}; do
         --max-concurrency 300 \
         --metric-percentiles 95,99 \
         --save-result \
-        --save-result-dir benchmarks/l40s_${MODEL}
+        --save-result-dir benchmarks/a40_${MODEL}
 done
