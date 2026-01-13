@@ -274,7 +274,6 @@ class WebsocketPolicyServer:
                     # Send individual responses with new protocol
                     for i in range(num_real):
                         socket.send_pyobj(("response", (request_ids[i], actions[i])))
-                        logger.info(f"Sent result for request {request_ids[i]} via ZeroMQ")
 
                     batch_counter += 1
         finally:
@@ -311,7 +310,6 @@ class WebsocketPolicyServer:
                 # ROUTER sends: identity frame + message frame
                 await self._socket.send(self._worker_identity, zmq.SNDMORE)
                 await self._socket.send_pyobj((request_id, request))
-                logger.info(f"Sent request {request_id} via ZeroMQ")
 
                 action = await self.responses[request_id]
 
