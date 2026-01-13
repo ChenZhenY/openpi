@@ -1,10 +1,8 @@
 import asyncio
 from collections.abc import Callable
-import datetime
 import http
 import logging
 import multiprocessing as mp
-import pathlib
 import time
 import traceback
 from typing import Any
@@ -19,7 +17,9 @@ import websockets.frames
 import zmq
 import zmq.asyncio
 
+from openpi.serving.metrics import BatchMetrics
 from openpi.serving.metrics import MetricsCollector
+from openpi.serving.metrics import plot_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,6 @@ class WebsocketPolicyServer:
         self._metadata = metadata or {}
         self._batch_size = batch_size
         self._log_dir = log_dir
-        self.setup_logging()
 
         # Create unique IPC endpoint for ZeroMQ ROUTER/DEALER socket
         socket_id = uuid.uuid4().hex[:8]
@@ -60,14 +59,6 @@ class WebsocketPolicyServer:
         self.last_request_id = 0
 
         self._metrics = MetricsCollector()
-
-    def setup_logging(self) -> None:
-        log_path = (
-            pathlib.Path(self._log_dir)
-            / f"serve_policy_{datetime.datetime.now(tz=datetime.UTC).strftime('%Y%m%d_%H%M%S')}.log"
-        )
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        logging.basicConfig(level=logging.INFO, datefmt="[%X]", force=True, filename=log_path)
 
     def serve_forever(self) -> None:
         asyncio.run(self.run())
@@ -111,8 +102,6 @@ class WebsocketPolicyServer:
             # Generate plots before cleanup
             if self._log_dir:
                 logger.info("Generating metrics plots...")
-                from openpi.serving.metrics import plot_metrics
-
                 plot_metrics(self._metrics, self._log_dir)
 
             # Cleanup
@@ -270,8 +259,6 @@ class WebsocketPolicyServer:
                     batch_end_time = time.monotonic()
 
                     # Create batch metrics
-                    from openpi.serving.metrics import BatchMetrics
-
                     batch_metric = BatchMetrics(
                         batch_id=batch_counter,
                         processing_start_time=batch_start_time,

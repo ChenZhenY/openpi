@@ -1,4 +1,5 @@
 import dataclasses
+import datetime
 import pathlib
 import sys
 
@@ -8,6 +9,7 @@ from openpi.policies import policy as _policy
 from openpi.policies import policy_config as _policy_config
 from openpi.policies.policy import EnvMode
 from openpi.serving import websocket_policy_server
+from openpi.shared import logging_config
 from openpi.training import config as _config
 
 # Import shared utilities
@@ -83,6 +85,13 @@ def create_policy(args: Args) -> _policy.Policy:
 
 
 def main(args: Args) -> None:
+    log_path = (
+        pathlib.Path(args.log_dir)
+        / f"serve_policy_{datetime.datetime.now(tz=datetime.UTC).strftime('%Y%m%d_%H%M%S')}.log"
+    )
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    logging_config.setup_logging(log_path=log_path)
+
     # Create policy factory to avoid CUDA context fork issues
     def policy_factory():
         policy = create_policy(args)

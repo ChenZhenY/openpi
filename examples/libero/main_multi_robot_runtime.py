@@ -22,7 +22,7 @@ from rich.console import Console
 from rich.table import Table
 
 from examples.libero import utils
-from examples.libero import logging_config
+from openpi.shared import logging_config
 from examples.libero.env import LiberoSimEnvironment
 from examples.libero.progress_manager import get_progress_manager
 from examples.libero.subscribers.saver import Saver, Result

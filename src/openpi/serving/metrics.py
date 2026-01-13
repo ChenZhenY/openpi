@@ -10,7 +10,12 @@ from pathlib import Path
 import time
 from typing import Any
 
+import matplotlib  # noqa: ICN001
 import numpy as np
+
+matplotlib.use("Agg")  # Non-interactive backend
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 logger = logging.getLogger(__name__)
 
@@ -182,12 +187,6 @@ class MetricsCollector:
 
 def plot_metrics(metrics: MetricsCollector, output_dir: str) -> None:
     """Generate and save metrics plots."""
-    import matplotlib  # noqa: ICN001
-
-    matplotlib.use("Agg")  # Non-interactive backend
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-
     sns.set_style("darkgrid")
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
