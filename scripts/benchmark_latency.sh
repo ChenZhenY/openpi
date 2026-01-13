@@ -2,7 +2,7 @@
 #SBATCH --job-name=benchmark_latency
 #SBATCH --output=logs/benchmark_latency_%A_%a.out
 #SBATCH --error=logs/benchmark_latency_%A_%a.err
-#SBATCH --array=0-5
+#SBATCH --array=0-20
 #SBATCH --partition=overcap
 #SBATCH --time=24:00:00
 #SBATCH --nodes=1
@@ -14,14 +14,21 @@
 # Exit on error
 set -e  
 
-BATCH_SIZES=(1 2 4 8 16 32)
-BATCH_SIZE=${BATCH_SIZES[$SLURM_ARRAY_TASK_ID]}
+MODELS=("LIBERO_REALTIME" "LIBERO_PI0" "LIBERO_PYTORCH")
+BATCH_SIZES=(1 2 4 8 16 32 64)
+
+# Calculate model and batch size indices from array task ID
+MODEL_INDEX=$((${SLURM_ARRAY_TASK_ID} / 7))
+BATCH_SIZE_INDEX=$((${SLURM_ARRAY_TASK_ID} % 7))
+
+MODEL=${MODELS[$MODEL_INDEX]}
+BATCH_SIZE=${BATCH_SIZES[$BATCH_SIZE_INDEX]}
 
 port=$((8080 + ${SLURM_ARRAY_TASK_ID:-0}))
 
 echo "======================================"
 echo "Array Task ID: $SLURM_ARRAY_TASK_ID"
-echo "Running with batch_size=$BATCH_SIZE and port=$port"
+echo "Running with model=$MODEL, batch_size=$BATCH_SIZE, and port=$port"
 echo "======================================"
 
 # Source shell configuration
@@ -43,7 +50,7 @@ trap cleanup EXIT INT TERM
 
 # Start the background process
 cmd="uv run scripts/serve_policy.py \
-    --env=LIBERO \
+    --env=$MODEL \
     --batch_size=$BATCH_SIZE \
     --port=$port"
 
@@ -72,5 +79,5 @@ for REQUEST_RATE in ${REQUEST_RATES[@]}; do
         --max-concurrency 300 \
         --metric-percentiles 95,99 \
         --save-result \
-        --save-result-dir benchmarks/with_typechecking
+        --save-result-dir benchmarks/l40s_${MODEL}
 done
