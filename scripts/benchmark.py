@@ -325,7 +325,6 @@ async def benchmark(
         "latencies": [o.latency for o in outputs if o.success],
         "arrival_times": arrival_times,
         "errors": [o.error for o in outputs if not o.success],
-        "policy_timing": [o.outputs["policy_timing"] for o in outputs if o.success],
         "gpu_info": gpu_info,
     }
 

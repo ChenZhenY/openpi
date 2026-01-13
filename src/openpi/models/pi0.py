@@ -415,8 +415,7 @@ class Pi0(_model.BaseModel):
         d: at.Int[at.Array, " b"] | None = None,
         return_debug_data: bool = False,
         **kwargs,
-    ) -> tuple[_model.Actions, dict[str, float], dict | None]:
-        times = {}
+    ) -> tuple[_model.Actions, dict | None]:
         debug_data = {} if return_debug_data else None
 
         if return_debug_data:
@@ -470,7 +469,7 @@ class Pi0(_model.BaseModel):
         if return_debug_data:
             debug_data["output_actions"] = jnp.array(x_0)
 
-        return x_0, times, debug_data
+        return x_0, debug_data
 
     def make_example_actions(self) -> _model.Actions:
         return jnp.zeros((self.action_horizon, self.action_dim))
