@@ -4,7 +4,7 @@ import pathlib
 import tyro
 from moviepy.editor import VideoFileClip, CompositeVideoClip, concatenate_videoclips
 from dataclasses import dataclass
-from openpi.shared import logging_config
+from examples.libero import logging_config
 import numpy as np
 from typing import Tuple, Dict, Literal
 from PIL import Image, ImageDraw, ImageFont

@@ -13,7 +13,7 @@ import tyro
 
 from examples.libero import visualize
 from examples.libero import utils
-from openpi.shared import logging_config
+from examples.libero import logging_config
 
 LIBERO_DUMMY_ACTION = [0.0] * 6 + [-1.0]
 LIBERO_ENV_RESOLUTION = 256  # resolution used to render training data

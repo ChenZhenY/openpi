@@ -265,7 +265,6 @@ class WebsocketPolicyServer:
                         processing_end_time=batch_end_time,
                         num_real_requests=num_real,
                         total_batch_size=batch_size,
-                        policy_times=actions[0].get("times", {}) if actions else {},
                         request_ids=request_ids[:num_real],
                     )
 
