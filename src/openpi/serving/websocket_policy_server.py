@@ -1,8 +1,11 @@
 import asyncio
 from collections.abc import Callable
+import datetime
 import http
 import logging
 import multiprocessing as mp
+import pathlib
+import time
 import traceback
 from typing import Any
 import uuid
@@ -15,6 +18,8 @@ import websockets.asyncio.server as _server
 import websockets.frames
 import zmq
 import zmq.asyncio
+
+from openpi.serving.metrics import MetricsCollector
 
 logger = logging.getLogger(__name__)
 
@@ -32,12 +37,15 @@ class WebsocketPolicyServer:
         port: int | None = None,
         metadata: dict | None = None,
         batch_size: int = 1,
+        log_dir: str | None = None,
     ) -> None:
         self._policy_factory = policy_factory
         self._host = host
         self._port = port
         self._metadata = metadata or {}
         self._batch_size = batch_size
+        self._log_dir = log_dir
+        self.setup_logging()
 
         # Create unique IPC endpoint for ZeroMQ ROUTER/DEALER socket
         socket_id = uuid.uuid4().hex[:8]
@@ -50,7 +58,16 @@ class WebsocketPolicyServer:
         self.responses = dict[int, asyncio.futures.Future]()
         self._worker_identity: bytes | None = None  # Worker identity (learned from first message)
         self.last_request_id = 0
-        logging.getLogger("websockets.server").setLevel(logging.INFO)
+
+        self._metrics = MetricsCollector()
+
+    def setup_logging(self) -> None:
+        log_path = (
+            pathlib.Path(self._log_dir)
+            / f"serve_policy_{datetime.datetime.now(tz=datetime.UTC).strftime('%Y%m%d_%H%M%S')}.log"
+        )
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        logging.basicConfig(level=logging.INFO, datefmt="[%X]", force=True, filename=log_path)
 
     def serve_forever(self) -> None:
         asyncio.run(self.run())
@@ -88,11 +105,22 @@ class WebsocketPolicyServer:
                 process_request=_health_check,
             ) as server:
                 await server.serve_forever()
+        except KeyboardInterrupt:
+            logger.info("Server interrupted, shutting down...")
         finally:
+            # Generate plots before cleanup
+            if self._log_dir:
+                logger.info("Generating metrics plots...")
+                from openpi.serving.metrics import plot_metrics
+
+                plot_metrics(self._metrics, self._log_dir)
+
             # Cleanup
             response_task.cancel()
             self._socket.close()
             zmq_ctx.term()
+            self._worker.terminate()
+            self._worker.join(timeout=5)
 
     async def _process_responses(self):
         """Background task that reads from the ROUTER socket and completes futures.
@@ -118,14 +146,40 @@ class WebsocketPolicyServer:
                     logger.info("Received ready message from worker")
                     continue
 
-                # Handle normal request/response messages
-                request_id, action = message
+                # Handle typed messages (message_type, payload)
+                msg_type, payload = message
 
-                if request_id in self.responses:
-                    self.responses[request_id].set_result(action)
-                    logger.info(f"Set result for request {request_id}")
-                else:
-                    logger.warning(f"Received response for unknown request {request_id}")
+                if msg_type == "response":
+                    # Handle normal request/response messages
+                    request_id, action = payload
+
+                    if request_id in self.responses:
+                        self.responses[request_id].set_result(action)
+                        logger.info(f"Set result for request {request_id}")
+                    else:
+                        logger.warning(f"Received response for unknown request {request_id}")
+
+                elif msg_type == "batch_metrics":
+                    # Handle batch metrics from worker
+                    batch_metric = payload
+                    self._metrics.add_batch_metrics(batch_metric)
+
+                    # Update processing start time for all requests in batch
+                    self._metrics.add_batch_start(
+                        batch_metric.request_ids,
+                        batch_metric.processing_start_time,
+                    )
+
+                    # Log observability metrics
+                    stats = self._metrics.get_recent_latency_stats()
+                    logger.info(
+                        f"Batch {batch_metric.batch_id} completed: "
+                        f"batch_time={batch_metric.batch_processing_time * 1000:.1f}ms, "
+                        f"avg_lat_1={stats['avg_1'] * 1000:.1f}ms, "
+                        f"avg_lat_5={stats['avg_5'] * 1000:.1f}ms, "
+                        f"avg_lat_10={stats['avg_10'] * 1000:.1f}ms"
+                    )
+
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -159,50 +213,84 @@ class WebsocketPolicyServer:
         poller = zmq.Poller()
         poller.register(socket, zmq.POLLIN)
 
+        # Initialize batch counter and request buffer
+        batch_counter = 0
+        request_buffer = []  # Buffer for requests beyond batch_size
+
         try:
             while True:
-                request_ids = []
-                batch = []
+                # Wait indefinitely for the first message (if buffer empty)
+                if not request_buffer:
+                    poller.poll()  # Block until at least one message arrives
+                    request_id, obs = socket.recv_pyobj()
+                    request_buffer.append((request_id, obs))
 
-                # Wait indefinitely for the first message
-                poller.poll()  # Block until at least one message arrives
-
-                # Receive the first message
-                request_id, obs = socket.recv_pyobj()
-                request_ids.append(request_id)
-                batch.append(obs)
-
-                # Collect additional messages up to batch_size.
-                while len(batch) < batch_size:
+                # Drain the entire queue non-blockingly
+                while True:
                     socks = dict(poller.poll(timeout=0))
                     if socket in socks and socks[socket] == zmq.POLLIN:
-                        # DEALER receives messages without identity frame
                         request_id, obs = socket.recv_pyobj()
-                        request_ids.append(request_id)
-                        batch.append(obs)
+                        request_buffer.append((request_id, obs))
                     else:
-                        # No more messages immediately available, process what we have
-                        break
+                        break  # Queue is empty
+
+                # Track metrics
+                queue_depth = len(request_buffer)
+                batch_start_time = time.monotonic()
+
+                # Take up to batch_size requests from buffer
+                request_ids = []
+                batch = []
+                num_real = min(batch_size, len(request_buffer))
+                for _ in range(num_real):
+                    request_id, obs = request_buffer.pop(0)
+                    request_ids.append(request_id)
+                    batch.append(obs)
+
+                # Pad batch to batch_size to avoid JIT recompilation
+                while len(batch) < batch_size:
+                    batch.append(batch[-1])
 
                 if batch:
-                    num_real = len(batch)
-                    # Pad batch to batch_size with to avoid JIT recompilation
-                    while len(batch) < batch_size:
-                        batch.append(batch[-1])
-
                     # TODO: can we support multiple infer_types in the same batch?
                     assert len({request.infer_type for request in batch}) == 1, (
                         "All requests must have the same infer_type"
                     )
 
-                    logger.info(f"Inferring batch of size {batch_size} (padded from {num_real} real requests)")
-                    actions = self._policy.infer_batch(batch)
+                    # Enhanced logging with accurate queue depth
+                    logger.info(
+                        f"Processing batch {batch_counter}: "
+                        f"queue_depth={queue_depth}, "
+                        f"real_requests={num_real}/{batch_size}, "
+                        f"utilization={num_real / batch_size:.2%}"
+                    )
 
-                    # Only send back results for real requests (not padding)
+                    # Execute inference
+                    actions = self._policy.infer_batch(batch)
+                    batch_end_time = time.monotonic()
+
+                    # Create batch metrics
+                    from openpi.serving.metrics import BatchMetrics
+
+                    batch_metric = BatchMetrics(
+                        batch_id=batch_counter,
+                        processing_start_time=batch_start_time,
+                        processing_end_time=batch_end_time,
+                        num_real_requests=num_real,
+                        total_batch_size=batch_size,
+                        policy_times=actions[0].get("times", {}) if actions else {},
+                        request_ids=request_ids[:num_real],
+                    )
+
+                    # Send batch metrics to main process
+                    socket.send_pyobj(("batch_metrics", batch_metric))
+
+                    # Send individual responses with new protocol
                     for i in range(num_real):
-                        # DEALER automatically adds identity frame when sending
-                        socket.send_pyobj((request_ids[i], actions[i]))
+                        socket.send_pyobj(("response", (request_ids[i], actions[i])))
                         logger.info(f"Sent result for request {request_ids[i]} via ZeroMQ")
+
+                    batch_counter += 1
         finally:
             socket.close()
             zmq_ctx.term()
@@ -218,13 +306,21 @@ class WebsocketPolicyServer:
                 message = msgpack_numpy.unpackb(await websocket.recv())
                 request = InferRequest(**message)
 
+                # Track arrival time
+                arrival_time = time.monotonic()
                 request_id = self.last_request_id + 1
                 self.last_request_id = request_id
+                self._metrics.add_request_arrival(request_id, arrival_time)
+
                 self.responses[request_id] = asyncio.Future()
 
                 # Worker identity should already be learned from ready message
                 if self._worker_identity is None:
                     raise RuntimeError("Worker identity not available - worker may not have connected")
+
+                # Track queued time
+                queued_time = time.monotonic()
+                self._metrics.add_request_queued(request_id, queued_time)
 
                 # ROUTER sends: identity frame + message frame
                 await self._socket.send(self._worker_identity, zmq.SNDMORE)
@@ -232,6 +328,11 @@ class WebsocketPolicyServer:
                 logger.info(f"Sent request {request_id} via ZeroMQ")
 
                 action = await self.responses[request_id]
+
+                # Track finished time
+                finished_time = time.monotonic()
+                self._metrics.add_request_finished(request_id, finished_time)
+
                 await websocket.send(packer.pack(action))
 
             except websockets.ConnectionClosed:
