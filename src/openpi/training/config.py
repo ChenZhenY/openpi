@@ -1152,21 +1152,23 @@ _CONFIGS = [
         # Each dataset uses its own prompt handling if prompt_from_task is True.
         model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
         data=MultiDatasetLiberoDataConfig(
-            repo_ids=["pi_libero_lerobot", "interpolation_50_1122data_SRBC_0110"],
+            repo_ids=["pi_libero_lerobot", "lerobot_interpolation_30steps_1112", "interpolation_50_1122data_SRBC_0110"],
             # Optional: adjust sampling ratio. [2.0, 1.0] means dataset 0 is sampled twice as often as dataset 1.
             # If None, uniform sampling is used.
-            dataset_weights=[1.0, 5.0],
+            dataset_weights=[1.0, 3.0, 3.0],
             base_config=DataConfig(prompt_from_task=True),
             extra_delta_transform=False,
             # Use shared normalization stats from a single asset_id
             assets=AssetsConfig(
-                assets_dir="/storage/home/hcoda1/2/zchen927/p-dxu345-0/openpi/assets/pi05_libero/assets/physical-intelligence",
+                assets_dir="/coc/flash7/zhenyang/openpi/assets/openpi-assets/checkpoints/pi05_libero/assets/physical-intelligence",
+                # assets_dir="/storage/home/hcoda1/2/zchen927/p-dxu345-0/openpi/assets/pi05_libero/assets/physical-intelligence",
                 asset_id="libero",
             ),
         ),
         batch_size=256,
         num_train_steps=2000,
-        weight_loader=weight_loaders.CheckpointWeightLoader("/storage/cedar/cedar0/cedarp-dxu345-0/zhenyang/checkpoints/liberogoal_pi_libero_cotraining_interpolation_50steps_1122/2000/params/"),
+        weight_loader=weight_loaders.CheckpointWeightLoader("/coc/cedarp-dxu345-0/zhenyang/checkpoints/liberogoal_pi_libero_cotraining_interpolation_50steps_1122/2000/params/"),
+        # weight_loader=weight_loaders.CheckpointWeightLoader("/storage/cedar/cedar0/cedarp-dxu345-0/zhenyang/checkpoints/liberogoal_pi_libero_cotraining_interpolation_50steps_1122/2000/params/"),
         save_interval=1000,
         keep_period=2000,
         lr_schedule=_optimizer.CosineDecaySchedule(
