@@ -486,3 +486,6 @@ class PI0Pytorch(nn.Module):
         suffix_out = suffix_out[:, -self.config.action_horizon :]
         suffix_out = suffix_out.to(dtype=torch.float32)
         return self.action_out_proj(suffix_out)
+
+    def make_example_actions(self) -> Tensor:
+        return torch.zeros((self.config.action_horizon, self.config.action_dim))
