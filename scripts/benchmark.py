@@ -43,7 +43,7 @@ from openpi.policies.libero_policy import make_libero_example
 
 # Import shared utilities
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
-from benchmark_utils import get_gpu_info
+from utils import get_gpu_info
 
 
 class EnvMode(enum.Enum):
@@ -88,9 +88,6 @@ def get_observation(env: EnvMode) -> dict:
         return make_libero_example()
 
     raise ValueError(f"Unknown environment: {env}")
-
-
-# Note: get_gpu_info is now imported from benchmark_utils
 
 
 async def get_request(

@@ -15,8 +15,8 @@ from openpi.training import config as _config
 
 # Import shared utilities
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
-from benchmark_utils import DEFAULT_CHECKPOINT
-from benchmark_utils import create_default_policy
+from utils import DEFAULT_CHECKPOINT
+from utils import create_default_policy
 
 
 @dataclasses.dataclass
@@ -61,9 +61,6 @@ class Args:
 
     # Log directory to save the logs to.
     log_dir: str | None = None
-
-
-# Note: DEFAULT_CHECKPOINT and create_default_policy are now imported from benchmark_utils
 
 
 def create_policy(args: Args) -> _policy.Policy:
