@@ -1,5 +1,6 @@
 """Metrics collection and visualization for the websocket policy server."""
 
+from collections import defaultdict
 from collections import deque
 from collections.abc import Sequence
 import csv
@@ -131,55 +132,34 @@ class MetricsCollector:
     def compute_aggregated_metrics(self) -> dict[str, Any]:
         """Compute aggregated metrics for plotting."""
         if not self.batch_metrics:
-            return {
-                "batch_times": [],
-                "batch_utilizations": [],
-                "real_throughputs": [],
-                "total_throughputs": [],
-                "timestamps": [],
-                "latencies": [],
-                "queue_waits": [],
-                "completed_requests": 0,
-                "total_batches": 0,
-            }
+            return {}
 
-        # Compute per-batch statistics
-        batch_times = []
-        batch_utilizations = []
-        real_throughputs = []
-        total_throughputs = []
-        timestamps = []
-
+        batches_per_second = defaultdict(list)
         for batch in self.batch_metrics:
-            batch_times.append(batch.batch_processing_time)
-            batch_utilizations.append(batch.batch_utilization)
-
-            # Compute throughput (requests per second)
             elapsed = batch.processing_start_time - self.start_time
-            timestamps.append(elapsed)
+            time_bucket = int(elapsed)
+            batches_per_second[time_bucket].append(batch)
 
-            # Cumulative throughput: total requests processed up to this point / elapsed time
-            batches_so_far = [b for b in self.batch_metrics if b.processing_start_time <= batch.processing_start_time]
-            total_real_requests = sum(b.num_real_requests for b in batches_so_far)
-            total_padded_requests = sum(b.total_batch_size for b in batches_so_far)
+        max_time_bucket = max(batches_per_second.keys())
+        real_throughputs = [
+            sum(b.num_real_requests for b in batches_per_second[time_bucket])
+            for time_bucket in range(max_time_bucket + 1)
+        ]
+        total_throughputs = [
+            sum(b.total_batch_size for b in batches_per_second[time_bucket])
+            for time_bucket in range(max_time_bucket + 1)
+        ]
 
-            real_throughputs.append(total_real_requests / elapsed if elapsed > 0 else 0)
-            total_throughputs.append(total_padded_requests / elapsed if elapsed > 0 else 0)
-
-        # Compute per-request latency statistics
         completed_requests = [m for m in self.request_metrics.values() if m.end_to_end_latency is not None]
 
-        latencies = [m.end_to_end_latency for m in completed_requests]
-        queue_waits = [m.queue_wait_time for m in completed_requests if m.queue_wait_time is not None]
-
         return {
-            "batch_times": batch_times,
-            "batch_utilizations": batch_utilizations,
-            "real_throughputs": real_throughputs,
+            "batch_times": [b.batch_processing_time for b in self.batch_metrics],
+            "batch_utilizations": [b.batch_utilization for b in self.batch_metrics],
+            "real_throughputs": real_throughputs,  # second level aggregration
             "total_throughputs": total_throughputs,
-            "timestamps": timestamps,
-            "latencies": latencies,
-            "queue_waits": queue_waits,
+            "timestamps": [b.processing_start_time - self.start_time for b in self.batch_metrics],
+            "latencies": [m.end_to_end_latency for m in completed_requests],
+            "queue_waits": [m.queue_wait_time for m in completed_requests if m.queue_wait_time is not None],
             "completed_requests": len(completed_requests),
             "total_batches": len(self.batch_metrics),
         }
@@ -198,22 +178,21 @@ def plot_metrics(metrics: MetricsCollector, output_dir: str) -> None:
         return
 
     # Create figure with 4 subplots (2x2)
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    fig, axes = plt.subplots(3, 1, figsize=(16, 12))
     fig.suptitle("Websocket Policy Server Metrics", fontsize=16, fontweight="bold")
 
-    # Plot 1: Real Throughput over Time
-    ax = axes[0, 0]
-    ax.plot(data["timestamps"], data["real_throughputs"], "b-", linewidth=2, label="Real Throughput")
-    ax.set_xlabel("Time (seconds)", fontweight="bold")
-    ax.set_ylabel("Throughput (requests/sec)", fontweight="bold")
-    ax.set_title("Real Throughput Over Time", fontweight="bold")
-    ax.grid(visible=True, alpha=0.3)
-    ax.legend()
-
     # Plot 2: Total Throughput (with padding) over Time
-    ax = axes[0, 1]
-    ax.plot(data["timestamps"], data["total_throughputs"], "r-", linewidth=2, label="Total (with padding)")
-    ax.plot(data["timestamps"], data["real_throughputs"], "b--", linewidth=1.5, alpha=0.7, label="Real")
+    ax = axes[0]
+    ax.plot(
+        range(len(data["total_throughputs"])),
+        data["total_throughputs"],
+        "r-",
+        linewidth=2,
+        label="Total (with padding)",
+    )
+    ax.plot(
+        range(len(data["real_throughputs"])), data["real_throughputs"], "b--", linewidth=1.5, alpha=0.7, label="Real"
+    )
     ax.set_xlabel("Time (seconds)", fontweight="bold")
     ax.set_ylabel("Throughput (requests/sec)", fontweight="bold")
     ax.set_title("Total vs Real Throughput Over Time", fontweight="bold")
@@ -221,7 +200,7 @@ def plot_metrics(metrics: MetricsCollector, output_dir: str) -> None:
     ax.legend()
 
     # Plot 3: Batch Utilization over Time
-    ax = axes[1, 0]
+    ax = axes[1]
     ax.plot(data["timestamps"], [u * 100 for u in data["batch_utilizations"]], "g-", linewidth=2)
     ax.set_xlabel("Time (seconds)", fontweight="bold")
     ax.set_ylabel("Batch Utilization (%)", fontweight="bold")
@@ -230,7 +209,7 @@ def plot_metrics(metrics: MetricsCollector, output_dir: str) -> None:
     ax.grid(visible=True, alpha=0.3)
 
     # Plot 4: Latency Statistics over Time (scatter + rolling window overlay)
-    ax = axes[1, 1]
+    ax = axes[2]
     if data["latencies"]:
         latencies_ms = [latency * 1000 for latency in data["latencies"]]
 
