@@ -1,5 +1,6 @@
 import logging
 import math
+import os
 
 import torch
 from torch import Tensor
@@ -9,6 +10,21 @@ import torch.nn.functional as F  # noqa: N812
 import openpi.models.gemma as _gemma
 from openpi.models_pytorch.gemma_pytorch import PaliGemmaWithExpertModel
 import openpi.models_pytorch.preprocessing_pytorch as _preprocessing
+
+logger = logging.getLogger("openpi")
+
+
+def _check_torch_compilation_cache():
+    """Check if PyTorch compilation cache is enabled and warn if not."""
+    cache_dir = os.environ.get("TORCHINDUCTOR_CACHE_DIR")
+    if cache_dir is None:
+        logger.warning(
+            "TORCHINDUCTOR_CACHE_DIR is not set. "
+            "PyTorch will recompile on every run. "
+            "Set TORCHINDUCTOR_CACHE_DIR=/path/to/cache to enable persistent compilation caching."
+        )
+    else:
+        logger.info(f"PyTorch compilation cache enabled at: {cache_dir}")
 
 
 def get_safe_dtype(target_dtype, device_type):
@@ -84,6 +100,7 @@ def make_att_2d_masks(pad_masks, att_masks):
 class PI0Pytorch(nn.Module):
     def __init__(self, config):
         super().__init__()
+        _check_torch_compilation_cache()
         self.config = config
         self.pi05 = config.pi05
 
