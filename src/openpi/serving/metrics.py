@@ -26,7 +26,7 @@ class RequestMetrics:
     """Tracks timing information for a single request."""
 
     request_id: int
-    arrival_time: float  # When received by websocket (time.monotonic())
+    arrival_time: float  # When received by websocket (time.perf_counter())
     queued_time: float  # When sent to worker via ZeroMQ
     processing_start_time: float | None = None  # When batch processing started
     finished_time: float | None = None  # When response sent back

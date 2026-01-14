@@ -225,7 +225,7 @@ class WebsocketPolicyServer:
 
                 # Track metrics
                 queue_depth = len(request_buffer)
-                batch_start_time = time.monotonic()
+                batch_start_time = time.perf_counter()
 
                 # Take up to batch_size requests from buffer
                 request_ids = []
@@ -256,7 +256,7 @@ class WebsocketPolicyServer:
 
                     # Execute inference
                     actions = self._policy.infer_batch(batch)
-                    batch_end_time = time.monotonic()
+                    batch_end_time = time.perf_counter()
 
                     # Create batch metrics
                     batch_metric = BatchMetrics(
@@ -292,7 +292,7 @@ class WebsocketPolicyServer:
                 request = InferRequest(**message)
 
                 # Track arrival time
-                arrival_time = time.monotonic()
+                arrival_time = time.perf_counter()
                 request_id = self.last_request_id + 1
                 self.last_request_id = request_id
                 self._metrics.add_request_arrival(request_id, arrival_time)
@@ -304,7 +304,7 @@ class WebsocketPolicyServer:
                     raise RuntimeError("Worker identity not available - worker may not have connected")
 
                 # Track queued time
-                queued_time = time.monotonic()
+                queued_time = time.perf_counter()
                 self._metrics.add_request_queued(request_id, queued_time)
 
                 # ROUTER sends: identity frame + message frame
@@ -314,7 +314,7 @@ class WebsocketPolicyServer:
                 action = await self.responses[request_id]
 
                 # Track finished time
-                finished_time = time.monotonic()
+                finished_time = time.perf_counter()
                 self._metrics.add_request_finished(request_id, finished_time)
 
                 await websocket.send(packer.pack(action))
