@@ -82,32 +82,37 @@ class MetricsCollector:
     recent_latencies: deque = field(default_factory=lambda: deque(maxlen=10))
 
     # Start time for throughput calculations
-    start_time: float = field(default_factory=time.monotonic)
+    start_time: float = field(default_factory=time.perf_counter)
+    first_arrival_time: float = field(default_factory=lambda: float("inf"))
+    last_arrival_time: float = field(default_factory=lambda: float("-inf"))
 
     def add_request_arrival(self, request_id: int, arrival_time: float) -> None:
         """Record when a request arrived at the websocket."""
+        normalized_arrival_time = arrival_time - self.start_time
         self.request_metrics[request_id] = RequestMetrics(
             request_id=request_id,
-            arrival_time=arrival_time,
+            arrival_time=normalized_arrival_time,
             queued_time=0.0,  # Will be set when queued
         )
+        self.first_arrival_time = min(self.first_arrival_time, normalized_arrival_time)
+        self.last_arrival_time = max(self.last_arrival_time, normalized_arrival_time)
 
     def add_request_queued(self, request_id: int, queued_time: float) -> None:
         """Record when a request was sent to worker queue."""
         if request_id in self.request_metrics:
-            self.request_metrics[request_id].queued_time = queued_time
+            self.request_metrics[request_id].queued_time = queued_time - self.start_time
 
     def add_batch_start(self, request_ids: Sequence[int], start_time: float) -> None:
         """Record when batch processing started."""
         for req_id in request_ids:
             if req_id in self.request_metrics:
-                self.request_metrics[req_id].processing_start_time = start_time
+                self.request_metrics[req_id].processing_start_time = start_time - self.start_time
 
     def add_request_finished(self, request_id: int, finished_time: float) -> None:
         """Record when a request response was sent."""
         if request_id in self.request_metrics:
             metrics = self.request_metrics[request_id]
-            metrics.finished_time = finished_time
+            metrics.finished_time = finished_time - self.start_time
 
             # Add to recent latencies for logging
             if metrics.end_to_end_latency is not None:
@@ -115,7 +120,16 @@ class MetricsCollector:
 
     def add_batch_metrics(self, batch_metric: BatchMetrics) -> None:
         """Record batch-level metrics."""
-        self.batch_metrics.append(batch_metric)
+        self.batch_metrics.append(
+            BatchMetrics(
+                batch_id=batch_metric.batch_id,
+                processing_start_time=batch_metric.processing_start_time - self.start_time,
+                processing_end_time=batch_metric.processing_end_time - self.start_time,
+                num_real_requests=batch_metric.num_real_requests,
+                total_batch_size=batch_metric.total_batch_size,
+                request_ids=batch_metric.request_ids,
+            )
+        )
 
     def get_recent_latency_stats(self) -> dict[str, float]:
         """Get statistics for recent latencies (1, 5, 10 samples)."""
@@ -136,28 +150,26 @@ class MetricsCollector:
 
         batches_per_second = defaultdict(list)
         for batch in self.batch_metrics:
-            elapsed = batch.processing_start_time - self.start_time
-            time_bucket = int(elapsed)
+            time_bucket = int(batch.processing_start_time)
             batches_per_second[time_bucket].append(batch)
 
-        max_time_bucket = max(batches_per_second.keys())
-        real_throughputs = [
-            sum(b.num_real_requests for b in batches_per_second[time_bucket])
-            for time_bucket in range(max_time_bucket + 1)
-        ]
-        total_throughputs = [
-            sum(b.total_batch_size for b in batches_per_second[time_bucket])
-            for time_bucket in range(max_time_bucket + 1)
-        ]
+        min_second_bucket = int(self.first_arrival_time)
+        max_second_bucket = int(self.last_arrival_time)
 
         completed_requests = [m for m in self.request_metrics.values() if m.end_to_end_latency is not None]
 
         return {
             "batch_times": [b.batch_processing_time for b in self.batch_metrics],
             "batch_utilizations": [b.batch_utilization for b in self.batch_metrics],
-            "real_throughputs": real_throughputs,  # second level aggregration
-            "total_throughputs": total_throughputs,
-            "timestamps": [b.processing_start_time - self.start_time for b in self.batch_metrics],
+            "real_throughputs": [
+                sum(b.num_real_requests for b in batches_per_second[time_bucket])
+                for time_bucket in range(min_second_bucket, max_second_bucket + 1)
+            ],
+            "total_throughputs": [
+                sum(b.total_batch_size for b in batches_per_second[time_bucket])
+                for time_bucket in range(min_second_bucket, max_second_bucket + 1)
+            ],
+            "timestamps": [b.processing_start_time for b in self.batch_metrics],
             "latencies": [m.end_to_end_latency for m in completed_requests],
             "queue_waits": [m.queue_wait_time for m in completed_requests if m.queue_wait_time is not None],
             "completed_requests": len(completed_requests),
@@ -178,38 +190,51 @@ def plot_metrics(metrics: MetricsCollector, output_dir: str) -> None:
         return
 
     # Create figure with 4 subplots (2x2)
-    fig, axes = plt.subplots(3, 1, figsize=(16, 12))
+    fig, axes = plt.subplots(4, 1, figsize=(16, 12))
     fig.suptitle("Websocket Policy Server Metrics", fontsize=16, fontweight="bold")
+    xlim = (metrics.first_arrival_time - 1, metrics.last_arrival_time + 1)
 
-    # Plot 2: Total Throughput (with padding) over Time
+    # Plot 0: Arrival Time Rug Plot
     ax = axes[0]
+    sns.rugplot(data["timestamps"], ax=ax)
+    ax.set_xlim(xlim)
+    ax.set_xlabel("Time (seconds)", fontweight="bold")
+    ax.set_ylabel("Density", fontweight="bold")
+    ax.set_title("Arrival Time Distribution", fontweight="bold")
+    ax.grid(visible=True, alpha=0.3)
+    ax.legend()
+
+    # Plot 1: Total Throughput (with padding) over Time
+    ax = axes[1]
+    # FIXME: can definitely clean up these metrics
+    seconds_range = range(int(metrics.first_arrival_time), int(metrics.last_arrival_time) + 1)
     ax.plot(
-        range(len(data["total_throughputs"])),
+        seconds_range,
         data["total_throughputs"],
         "r-",
         linewidth=2,
         label="Total (with padding)",
     )
-    ax.plot(
-        range(len(data["real_throughputs"])), data["real_throughputs"], "b--", linewidth=1.5, alpha=0.7, label="Real"
-    )
+    ax.set_xlim(xlim)
+    ax.plot(seconds_range, data["real_throughputs"], "b--", linewidth=1.5, alpha=0.7, label="Real")
     ax.set_xlabel("Time (seconds)", fontweight="bold")
     ax.set_ylabel("Throughput (requests/sec)", fontweight="bold")
     ax.set_title("Total vs Real Throughput Over Time", fontweight="bold")
     ax.grid(visible=True, alpha=0.3)
     ax.legend()
 
-    # Plot 3: Batch Utilization over Time
-    ax = axes[1]
+    # Plot 2: Batch Utilization over Time
+    ax = axes[2]
     ax.plot(data["timestamps"], [u * 100 for u in data["batch_utilizations"]], "g-", linewidth=2)
     ax.set_xlabel("Time (seconds)", fontweight="bold")
     ax.set_ylabel("Batch Utilization (%)", fontweight="bold")
     ax.set_title("Batch Utilization Over Time", fontweight="bold")
+    ax.set_xlim(xlim)
     ax.set_ylim(0, 105)
     ax.grid(visible=True, alpha=0.3)
 
-    # Plot 4: Latency Statistics over Time (scatter + rolling window overlay)
-    ax = axes[2]
+    # Plot 3: Latency Statistics over Time (scatter + rolling window overlay)
+    ax = axes[3]
     if data["latencies"]:
         latencies_ms = [latency * 1000 for latency in data["latencies"]]
 
@@ -261,6 +286,7 @@ def plot_metrics(metrics: MetricsCollector, output_dir: str) -> None:
         ax.set_ylabel("Latency (ms)", fontweight="bold")
         ax.set_title("End-to-End Latency Over Time (Scatter + Rolling Window)", fontweight="bold")
         ax.grid(visible=True, alpha=0.3)
+        ax.set_xlim(xlim)
         ax.legend()
 
     plt.tight_layout()
