@@ -236,9 +236,9 @@ class WebsocketPolicyServer:
                     request_ids.append(request_id)
                     batch.append(obs)
 
-                # Pad batch to batch_size to avoid JIT recompilation
-                while len(batch) < batch_size:
-                    batch.append(batch[-1])
+                # # Pad batch to batch_size to avoid JIT recompilation
+                # while len(batch) < batch_size:
+                #     batch.append(batch[-1])
 
                 if batch:
                     # TODO: can we support multiple infer_types in the same batch?
@@ -330,16 +330,16 @@ class WebsocketPolicyServer:
                 )
                 raise
 
-    def _warmup(self, batch_size: int) -> None:
-        """Warm up policy by compiling for the fixed batch_size.
+    def _warmup(self, max_batch_size: int) -> None:
+        """Warm up policy by compiling for the fixed max_batch_size.
 
-        Since we always pad batches to batch_size, we only need to compile once.
+        Since we always pad batches to max_batch_size, we only need to compile once.
         This avoids JIT compilation delays during inference.
         """
         logger.info("Warming up policy...")
         observation = self._policy.make_example()
 
-        requests = []
+        requests: list[InferRequest] = []
 
         requests.append(InferRequest(observation=observation, infer_type=InferType.SYNC, params=None))
         requests.append(
@@ -353,11 +353,12 @@ class WebsocketPolicyServer:
                 ),
             )
         )
-        for request in requests:
-            logger.info(f"Warming up {request.infer_type} for batch_size={batch_size}")
-            # Warm up with full batch_size (we always pad to this size)
-            batch = [request] * batch_size
-            self._policy.infer_batch(batch)
+        for batch_size in range(1, max_batch_size + 1):
+            for request in requests:
+                logger.info(f"Warming up {request.infer_type} for batch_size={batch_size}")
+                # Warm up with full batch_size (we always pad to this size)
+                batch = [request] * batch_size
+                self._policy.infer_batch(batch)
 
 
 def _health_check(connection: _server.ServerConnection, request: Any) -> Any | None:

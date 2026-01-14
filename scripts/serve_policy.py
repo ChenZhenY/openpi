@@ -53,7 +53,7 @@ class Args:
     policy: Checkpoint | Default = dataclasses.field(default_factory=Default)
 
     # Batch size to use for inference.
-    batch_size: int = 1
+    max_batch_size: int = 1
 
     # Number of steps to use for sampling.
     num_steps: int = 10
@@ -72,13 +72,13 @@ def create_policy(args: Args) -> _policy.Policy:
                 default_prompt=args.default_prompt,
                 sample_kwargs={"num_steps": args.num_steps},
                 use_triton_optimized=(args.env == EnvMode.LIBERO_REALTIME),
-                batch_size=args.batch_size,
+                batch_size=args.max_batch_size,
             )
         case Default():
             print(type(args.policy))
             return create_default_policy(
                 args.env,
-                batch_size=args.batch_size,
+                batch_size=args.max_batch_size,
                 default_prompt=args.default_prompt,
                 sample_kwargs={"num_steps": args.num_steps},
             )
@@ -117,14 +117,14 @@ def main(args: Args) -> None:
     policy_metadata["num_steps"] = args.num_steps
     policy_metadata["action_horizon"] = train_config.model.action_horizon
     policy_metadata["env"] = args.env.value
-    policy_metadata["batch_size"] = args.batch_size
+    policy_metadata["batch_size"] = args.max_batch_size
 
     server = websocket_policy_server.WebsocketPolicyServer(
         policy_factory=policy_factory,
         host="0.0.0.0",
         port=args.port,
         metadata=policy_metadata,
-        batch_size=args.batch_size,
+        batch_size=args.max_batch_size,
         log_dir=args.log_dir,
     )
     server.serve_forever()
