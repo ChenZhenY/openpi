@@ -1,0 +1,23 @@
+# Configurable task prompts for robot control
+# Add or modify tasks here - the WebUI will automatically load them
+
+tasks:
+  - id: 1
+    prompt: "put the white bowl on the countertop shelf"
+  
+  - id: 2
+    prompt: "put the white bowl in the sink"
+  
+  - id: 3
+    prompt: "put the teabag in the yellow drawer"
+  
+  - id: 4
+    prompt: "put the teabag on the countertop shelf"
+  
+  - id: 5
+    prompt: "close the oven"
+  
+  - id: 6
+    prompt: "put the donut in the oven"
+
+

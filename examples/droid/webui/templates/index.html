@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DROID Robot Control</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header with status -->
+        <header class="header">
+            <div class="title-section">
+                <h1>DROID</h1>
+                <span class="subtitle">Voice Control Interface</span>
+            </div>
+            <div class="status-section">
+                <div class="connection-status" id="connectionStatus">
+                    <span class="status-dot disconnected"></span>
+                    <span class="status-text">Robot Disconnected</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Chat area -->
+        <main class="chat-area" id="chatArea">
+            <div class="welcome-message">
+                <div class="robot-icon">🤖</div>
+                <p>Hello! I'm ready to help. Hold the button below and speak to give me a task.</p>
+                <p class="hint">Try saying: "put the bowl in the sink" or "close the oven"</p>
+            </div>
+        </main>
+
+        <!-- Current task display -->
+        <div class="current-task" id="currentTask" style="display: none;">
+            <div class="task-label">Currently executing:</div>
+            <div class="task-text" id="currentTaskText"></div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="step-counter" id="stepCounter">Step 0 / 0</div>
+        </div>
+
+        <!-- Voice input section -->
+        <footer class="input-section">
+            <button class="voice-button" id="voiceButton">
+                <div class="mic-icon">🎤</div>
+                <span class="button-text">Hold to Speak</span>
+            </button>
+            <div class="recording-indicator" id="recordingIndicator">
+                <span class="pulse"></span>
+                <span>Listening...</span>
+            </div>
+        </footer>
+
+        <!-- Clarification modal -->
+        <div class="modal" id="clarifyModal" style="display: none;">
+            <div class="modal-content">
+                <h2>Which task did you mean?</h2>
+                <p id="clarifyMessage"></p>
+                <div class="task-options" id="taskOptions"></div>
+                <button class="cancel-button" onclick="closeClarifyModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
+
+

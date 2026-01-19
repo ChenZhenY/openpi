@@ -4,8 +4,11 @@ import contextlib
 import dataclasses
 import datetime
 import faulthandler
+import json
 import os
+import queue
 import signal
+import threading
 import time
 from moviepy.editor import ImageSequenceClip
 import numpy as np
@@ -16,6 +19,7 @@ from PIL import Image
 from droid.robot_env import RobotEnv
 import tqdm
 import tyro
+import websockets.sync.client
 
 faulthandler.enable()
 
@@ -46,6 +50,129 @@ class Args:
     remote_port: int = (
         8000  # point this to the port of the policy server, default server port for openpi servers is 8000
     )
+
+    # WebUI mode parameters
+    webui_mode: bool = False  # Enable WebUI mode for voice control
+    webui_host: str = "localhost"  # WebUI server host
+    webui_port: int = 8080  # WebUI server port
+
+
+class WebUIPromptReceiver:
+    """Receives prompts from WebUI server via WebSocket.
+    
+    This class connects to the WebUI server and listens for new task commands.
+    When a new prompt is received, it interrupts the current rollout.
+    """
+    
+    def __init__(self, host: str = "localhost", port: int = 8080):
+        self._uri = f"ws://{host}:{port}/ws/robot"
+        self._prompt_queue: queue.Queue[str] = queue.Queue()
+        self._interrupt_flag = threading.Event()
+        self._ws = None
+        self._running = False
+        self._thread = None
+        self._current_task: str | None = None
+        
+    def start(self):
+        """Start the WebSocket listener thread."""
+        self._running = True
+        self._thread = threading.Thread(target=self._listen_loop, daemon=True)
+        self._thread.start()
+        
+    def stop(self):
+        """Stop the WebSocket listener."""
+        self._running = False
+        if self._ws:
+            self._ws.close()
+        if self._thread:
+            self._thread.join(timeout=2.0)
+            
+    def _listen_loop(self):
+        """Main loop for WebSocket listener."""
+        while self._running:
+            try:
+                print(f"Connecting to WebUI server at {self._uri}...")
+                self._ws = websockets.sync.client.connect(self._uri)
+                print("Connected to WebUI server!")
+                
+                while self._running:
+                    try:
+                        message = self._ws.recv()
+                        data = json.loads(message)
+                        
+                        if data.get("type") == "new_task":
+                            prompt = data.get("prompt")
+                            if prompt:
+                                print(f"\n[WebUI] New task received: {prompt}")
+                                self._prompt_queue.put(prompt)
+                                self._interrupt_flag.set()
+                                
+                    except websockets.ConnectionClosed:
+                        print("[WebUI] Connection closed, reconnecting...")
+                        break
+                        
+            except Exception as e:
+                print(f"[WebUI] Connection error: {e}, retrying in 5s...")
+                time.sleep(5)
+                
+    def get_prompt(self, timeout: float | None = None) -> str | None:
+        """Get the next prompt from the queue.
+        
+        Args:
+            timeout: How long to wait for a prompt. None means wait forever.
+            
+        Returns:
+            The prompt string, or None if timeout expired.
+        """
+        try:
+            prompt = self._prompt_queue.get(timeout=timeout)
+            self._current_task = prompt
+            return prompt
+        except queue.Empty:
+            return None
+            
+    def should_interrupt(self) -> bool:
+        """Check if current rollout should be interrupted."""
+        return self._interrupt_flag.is_set()
+        
+    def clear_interrupt(self):
+        """Clear the interrupt flag after handling it."""
+        self._interrupt_flag.clear()
+        
+    def send_status(self, status: str, task: str | None = None):
+        """Send status update to WebUI."""
+        if self._ws:
+            try:
+                self._ws.send(json.dumps({
+                    "type": "status_update",
+                    "status": status,
+                    "task": task or self._current_task,
+                }))
+            except Exception:
+                pass
+                
+    def send_step_update(self, step: int, max_steps: int):
+        """Send step progress update to WebUI."""
+        if self._ws:
+            try:
+                self._ws.send(json.dumps({
+                    "type": "step_update",
+                    "step": step,
+                    "max_steps": max_steps,
+                }))
+            except Exception:
+                pass
+                
+    def send_task_complete(self, message: str = "Task completed"):
+        """Notify WebUI that task is complete."""
+        if self._ws:
+            try:
+                self._ws.send(json.dumps({
+                    "type": "task_complete",
+                    "message": message,
+                }))
+            except Exception:
+                pass
 
 
 # We are using Ctrl+C to optionally terminate rollouts early -- however, if we press Ctrl+C while the policy server is
@@ -83,23 +210,48 @@ def main(args: Args):
     # Connect to the policy server
     policy_client = websocket_client_policy.WebsocketClientPolicy(args.remote_host, args.remote_port)
 
+    # Initialize WebUI prompt receiver if in WebUI mode
+    prompt_receiver: WebUIPromptReceiver | None = None
+    if args.webui_mode:
+        prompt_receiver = WebUIPromptReceiver(args.webui_host, args.webui_port)
+        prompt_receiver.start()
+        print(f"WebUI mode enabled. Waiting for commands from {args.webui_host}:{args.webui_port}")
+
     df = pd.DataFrame(columns=["success", "duration", "video_filename"])
 
     while True:
-        instruction = input("Enter instruction: ")
+        # Get instruction from WebUI or terminal
+        if args.webui_mode and prompt_receiver:
+            print("Waiting for task from WebUI...")
+            instruction = prompt_receiver.get_prompt(timeout=None)
+            if instruction is None:
+                continue
+            prompt_receiver.clear_interrupt()
+            prompt_receiver.send_status("executing", instruction)
+        else:
+            instruction = input("Enter instruction: ")
 
         # Rollout parameters
         actions_from_chunk_completed = 0
         pred_action_chunk = None
+        interrupted_by_new_task = False
 
         # Prepare to save video of rollout
         timestamp = datetime.datetime.now().strftime("%Y_%m_%d_%H:%M:%S")
         video = []
         bar = tqdm.tqdm(range(args.max_timesteps))
-        print("Running rollout... press Ctrl+C to stop early.")
+        print(f"Running rollout for: {instruction}")
+        print("Press Ctrl+C to stop early." if not args.webui_mode else "Send new task from WebUI to interrupt.")
+        
         for t_step in bar:
             start_time = time.time()
             try:
+                # Check for WebUI interrupt (new task received)
+                if args.webui_mode and prompt_receiver and prompt_receiver.should_interrupt():
+                    print("\n[WebUI] Interrupted by new task!")
+                    interrupted_by_new_task = True
+                    break
+
                 # Get the current observation
                 curr_obs = _extract_observation(
                     args,
@@ -109,6 +261,10 @@ def main(args: Args):
                 )
 
                 video.append(curr_obs[f"{args.external_camera}_image"])
+
+                # Send step update to WebUI
+                if args.webui_mode and prompt_receiver:
+                    prompt_receiver.send_step_update(t_step + 1, args.max_timesteps)
 
                 # Send websocket request to policy server if it's time to predict a new chunk
                 if actions_from_chunk_completed == 0 or actions_from_chunk_completed >= args.open_loop_horizon:
@@ -157,9 +313,27 @@ def main(args: Args):
             except KeyboardInterrupt:
                 break
 
-        video = np.stack(video)
-        save_filename = "video_" + timestamp
-        ImageSequenceClip(list(video), fps=10).write_videofile(save_filename + ".mp4", codec="libx264")
+        # Handle rollout completion
+        if args.webui_mode and prompt_receiver:
+            if interrupted_by_new_task:
+                # Don't save video or ask for success rating, just continue to next task
+                prompt_receiver.send_task_complete("Task interrupted by new command")
+                continue
+            else:
+                prompt_receiver.send_task_complete("Task completed")
+                prompt_receiver.send_status("idle")
+
+        # Save video
+        if len(video) > 0:
+            video = np.stack(video)
+            save_filename = "video_" + timestamp
+            ImageSequenceClip(list(video), fps=10).write_videofile(save_filename + ".mp4", codec="libx264")
+        else:
+            save_filename = "no_video"
+
+        # Skip success rating in WebUI mode
+        if args.webui_mode:
+            continue
 
         success: str | float | None = None
         while not isinstance(success, float):
@@ -187,6 +361,10 @@ def main(args: Args):
         if input("Do one more eval? (enter y or n) ").lower() != "y":
             break
         env.reset()
+
+    # Cleanup
+    if prompt_receiver:
+        prompt_receiver.stop()
 
     os.makedirs("results", exist_ok=True)
     timestamp = datetime.datetime.now().strftime("%I:%M%p_%B_%d_%Y")

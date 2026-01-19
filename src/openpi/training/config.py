@@ -1554,7 +1554,9 @@ _CONFIGS = [
             ),
         ),
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_droid/params"),
-        num_train_steps=20_000,
+        # num_train_steps=20_000,
+        num_train_steps=5_000,
+        save_interval=2000,
         batch_size=32,
     ),
     TrainConfig(
@@ -1568,10 +1570,12 @@ _CONFIGS = [
         ),
         data=MultiDatasetDROIDDataConfig(
             # Replace with your custom DROID LeRobot dataset repo ids.
-            repo_ids=["RL2_Klaus_1224_4tasks_1228", "RL2_Klaus_2tasks_donut_0105"],
+            # repo_ids=["RL2_Klaus_1224_4tasks_1228", "RL2_Klaus_2tasks_donut_0105"],
+            repo_ids=["RL2_Klaus_1224_4tasks_1228", "RL2_Klaus_2tasks_donut_0105", "RL2_Klaus_2tasks_donut_interpolation_0118", "RL2_Klaus_2tasks_interpolation_1230"],
             # Optional: adjust sampling ratio. [2.0, 1.0] means dataset 0 is sampled twice as often as dataset 1.
             # If None, uniform sampling is used.
-            dataset_weights=[1.0, 1.0],
+            dataset_weights=[1.0, 1.0, 0.5, 0.5],
+            # dataset_weights=[1.0, 1.0],
             base_config=DataConfig(prompt_from_task=True),
             assets=AssetsConfig(
                 # Important: reuse the original DROID norm stats during fine-tuning!
@@ -1580,8 +1584,9 @@ _CONFIGS = [
             ),
         ),
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_droid/params"),
-        num_train_steps=20_000,
-        batch_size=32,
+        batch_size=32,  
+        num_train_steps=5_000,
+        save_interval=2000,
     ),
     #
     # ALOHA Sim configs. This config is used to demonstrate how to train on a simple simulated environment.
