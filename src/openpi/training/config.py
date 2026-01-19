@@ -673,6 +673,88 @@ class LeRobotDROIDDataConfig(DataConfigFactory):
 
 
 @dataclasses.dataclass(frozen=True)
+class MultiDatasetDROIDDataConfig(DataConfigFactory):
+    """
+    Data config factory for cotraining on multiple DROID datasets in LeRobot format.
+    
+    All datasets will share the same transforms and normalization stats (specified by asset_id).
+    Each dataset will have its own prompt handling if prompt_from_task is True.
+    """
+
+    # List of repo_ids for cotraining. If provided, repo_id is ignored.
+    repo_ids: Sequence[str] = tyro.MISSING
+    # Override repo_id to be optional since we use repo_ids instead
+    repo_id: str | None = None  # type: ignore[assignment]
+    # Sampling weights for each dataset. If provided, must have same length as repo_ids.
+    # Weights are normalized automatically. If None, uniform sampling is used.
+    # Example: [2.0, 1.0] means dataset 0 is sampled twice as often as dataset 1.
+    dataset_weights: Sequence[float] | None = None
+
+    def create_base_config(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        """Override to handle multi-dataset case where we don't have a single repo_id."""
+        # Use asset_id from assets config, or use first repo_id as fallback
+        asset_id = self.assets.asset_id
+        if asset_id is None and self.repo_ids is not tyro.MISSING and len(self.repo_ids) > 0:
+            asset_id = self.repo_ids[0]
+        
+        return dataclasses.replace(
+            self.base_config or DataConfig(),
+            repo_id=None,  # Will be set to None for multi-dataset mode
+            asset_id=asset_id,
+            norm_stats=self._load_norm_stats(epath.Path(self.assets.assets_dir or assets_dirs), asset_id),
+            use_quantile_norm=model_config.model_type != ModelType.PI0,
+        )
+
+    @override
+    def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        repack_transform = _transforms.Group(
+            inputs=[
+                _transforms.RepackTransform(
+                    {
+                        "observation/exterior_image_1_left": "exterior_image_1_left",
+                        "observation/exterior_image_2_left": "exterior_image_2_left",
+                        "observation/wrist_image_left": "wrist_image_left",
+                        "observation/joint_position": "joint_position",
+                        "observation/gripper_position": "gripper_position",
+                        "actions": "actions",
+                        "prompt": "prompt",
+                    }
+                )
+            ]
+        )
+        # We assume joint *velocity* actions, so we should *not* apply an additional delta transform.
+        data_transforms = _transforms.Group(
+            inputs=[droid_policy.DroidInputs(model_type=model_config.model_type)],
+            outputs=[droid_policy.DroidOutputs()],
+        )
+        model_transforms = ModelTransformFactory()(model_config)
+
+        # Create base config with shared normalization stats (from asset_id)
+        base_config = self.create_base_config(assets_dirs, model_config)
+        
+        # Validate dataset_weights if provided
+        if self.dataset_weights is not None:
+            if len(self.dataset_weights) != len(self.repo_ids):
+                raise ValueError(
+                    f"dataset_weights length ({len(self.dataset_weights)}) must match "
+                    f"repo_ids length ({len(self.repo_ids)})"
+                )
+            if any(w < 0 for w in self.dataset_weights):
+                raise ValueError("dataset_weights must be non-negative")
+        
+        # Set repo_ids and clear repo_id to use multi-dataset mode.
+        return dataclasses.replace(
+            base_config,
+            repo_id=None,  # Clear single repo_id
+            repo_ids=self.repo_ids,  # Set multiple repo_ids
+            dataset_weights=self.dataset_weights,  # Store dataset weights
+            repack_transforms=repack_transform,
+            data_transforms=data_transforms,
+            model_transforms=model_transforms,
+        )
+
+
+@dataclasses.dataclass(frozen=True)
 class TrainConfig:
     # Name of the config. Must be unique. Will be used to reference this config.
     name: tyro.conf.Suppress[str]
@@ -1152,10 +1234,12 @@ _CONFIGS = [
         # Each dataset uses its own prompt handling if prompt_from_task is True.
         model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
         data=MultiDatasetLiberoDataConfig(
-            repo_ids=["pi_libero_lerobot", "lerobot_interpolation_30steps_1112", "interpolation_50_1122data_SRBC_0110"],
+            # repo_ids=["pi_libero_lerobot", "lerobot_interpolation_30steps_1112", "0116_sampled_800_success_vs_mi_0.25_random"],
+            # TODO: check here for correct dataset
+            repo_ids=["pi_libero_lerobot", "lerobot_interpolation_50steps_1122", "0116_sampled_800_success_vs_mi_0.5_random"],
             # Optional: adjust sampling ratio. [2.0, 1.0] means dataset 0 is sampled twice as often as dataset 1.
             # If None, uniform sampling is used.
-            dataset_weights=[1.0, 3.0, 3.0],
+            dataset_weights=[1.0, 3.0, 15.0],
             base_config=DataConfig(prompt_from_task=True),
             extra_delta_transform=False,
             # Use shared normalization stats from a single asset_id
@@ -1167,9 +1251,11 @@ _CONFIGS = [
         ),
         batch_size=256,
         num_train_steps=2000,
-        weight_loader=weight_loaders.CheckpointWeightLoader("/coc/cedarp-dxu345-0/zhenyang/checkpoints/liberogoal_pi_libero_cotraining_interpolation_50steps_1122/2000/params/"),
+        # TODO: check here
+        weight_loader=weight_loaders.CheckpointWeightLoader("/coc/flash7/zhenyang/openpi/checkpoints/pi05_libero_cotraining_SRBC/liberogoal_pi_SRBC_success_vs_mi_0.5_random_0116/1999/params"),
+        # weight_loader=weight_loaders.CheckpointWeightLoader("/coc/cedarp-dxu345-0/zhenyang/checkpoints/liberogoal_pi_libero_cotraining_interpolation_50steps_1122/2000/params/"),
         # weight_loader=weight_loaders.CheckpointWeightLoader("/storage/cedar/cedar0/cedarp-dxu345-0/zhenyang/checkpoints/liberogoal_pi_libero_cotraining_interpolation_50steps_1122/2000/params/"),
-        save_interval=1000,
+        save_interval=500,
         keep_period=2000,
         lr_schedule=_optimizer.CosineDecaySchedule(
             warmup_steps=10_000,
@@ -1460,6 +1546,32 @@ _CONFIGS = [
         data=LeRobotDROIDDataConfig(
             # Replace with your custom DROID LeRobot dataset repo id.
             repo_id="your_hf_username/my_droid_dataset",
+            base_config=DataConfig(prompt_from_task=True),
+            assets=AssetsConfig(
+                # Important: reuse the original DROID norm stats during fine-tuning!
+                assets_dir="gs://openpi-assets/checkpoints/pi05_droid/assets",
+                asset_id="droid",
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_droid/params"),
+        num_train_steps=20_000,
+        batch_size=32,
+    ),
+    TrainConfig(
+        # This config is for fine-tuning pi05-DROID on multiple custom DROID datasets (cotraining).
+        # Uses LeRobot data format. To convert your DROID datasets, see examples/droid/convert_droid_data_to_lerobot.py
+        name="pi05_droid_finetune_multidataset",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_dim=32,  # pi05 is trained with 32-dim actions
+            action_horizon=16,
+        ),
+        data=MultiDatasetDROIDDataConfig(
+            # Replace with your custom DROID LeRobot dataset repo ids.
+            repo_ids=["RL2_Klaus_1224_4tasks_1228", "RL2_Klaus_2tasks_donut_0105"],
+            # Optional: adjust sampling ratio. [2.0, 1.0] means dataset 0 is sampled twice as often as dataset 1.
+            # If None, uniform sampling is used.
+            dataset_weights=[1.0, 1.0],
             base_config=DataConfig(prompt_from_task=True),
             assets=AssetsConfig(
                 # Important: reuse the original DROID norm stats during fine-tuning!
