@@ -1236,7 +1236,7 @@ _CONFIGS = [
         data=MultiDatasetLiberoDataConfig(
             # repo_ids=["pi_libero_lerobot", "lerobot_interpolation_30steps_1112", "0116_sampled_800_success_vs_mi_0.25_random"],
             # TODO: check here for correct dataset
-            repo_ids=["pi_libero_lerobot", "lerobot_interpolation_50steps_1122", "0116_sampled_800_success_vs_mi_0.5_random"],
+            repo_ids=["pi_libero_lerobot", "lerobot_interpolation_50steps_1122", "0116_sampled_2000_success_vs_mi_1.0_random"],
             # Optional: adjust sampling ratio. [2.0, 1.0] means dataset 0 is sampled twice as often as dataset 1.
             # If None, uniform sampling is used.
             dataset_weights=[1.0, 3.0, 15.0],
@@ -1250,13 +1250,13 @@ _CONFIGS = [
             ),
         ),
         batch_size=256,
-        num_train_steps=2000,
+        num_train_steps=10_000,
         # TODO: check here
-        weight_loader=weight_loaders.CheckpointWeightLoader("/coc/flash7/zhenyang/openpi/checkpoints/pi05_libero_cotraining_SRBC/liberogoal_pi_SRBC_success_vs_mi_0.5_random_0116/1999/params"),
-        # weight_loader=weight_loaders.CheckpointWeightLoader("/coc/cedarp-dxu345-0/zhenyang/checkpoints/liberogoal_pi_libero_cotraining_interpolation_50steps_1122/2000/params/"),
+        # weight_loader=weight_loaders.CheckpointWeightLoader("/coc/flash7/zhenyang/openpi/checkpoints/pi05_libero_cotraining_SRBC/liberogoal_pi_SRBC_success_vs_mi_0.5_random_0116/1999/params"),
+        weight_loader=weight_loaders.CheckpointWeightLoader("/coc/cedarp-dxu345-0/zhenyang/checkpoints/liberogoal_pi_libero_cotraining_interpolation_50steps_1122/2000/params/"),
         # weight_loader=weight_loaders.CheckpointWeightLoader("/storage/cedar/cedar0/cedarp-dxu345-0/zhenyang/checkpoints/liberogoal_pi_libero_cotraining_interpolation_50steps_1122/2000/params/"),
-        save_interval=500,
-        keep_period=2000,
+        save_interval=1000,
+        keep_period=4000,
         lr_schedule=_optimizer.CosineDecaySchedule(
             warmup_steps=10_000,
             peak_lr=5e-5,
@@ -1571,7 +1571,7 @@ _CONFIGS = [
         data=MultiDatasetDROIDDataConfig(
             # Replace with your custom DROID LeRobot dataset repo ids.
             # repo_ids=["RL2_Klaus_1224_4tasks_1228", "RL2_Klaus_2tasks_donut_0105"],
-            repo_ids=["RL2_Klaus_1224_4tasks_1228", "RL2_Klaus_2tasks_donut_0105", "RL2_Klaus_2tasks_donut_interpolation_0118", "RL2_Klaus_2tasks_interpolation_1230"],
+            repo_ids=["RL2_Klaus_1224_4tasks_1228", "RL2_Klaus_2tasks_donut_0105", "RL2_Klaus_2tasks_close_oven-tea_bag_interpolation_0120", "RL2_Klaus_2tasks_interpolation_1230"],
             # Optional: adjust sampling ratio. [2.0, 1.0] means dataset 0 is sampled twice as often as dataset 1.
             # If None, uniform sampling is used.
             dataset_weights=[1.0, 1.0, 0.5, 0.5],

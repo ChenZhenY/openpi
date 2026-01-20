@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J pi05_droid_6tasks_interp_multidataset         # Job name
+#SBATCH -J pi05_droid_6tasks_interp_multidataset_0120         # Job name
 #SBATCH --partition=overcap
 #SBATCH --nodes=1   # NOTE: try to use GPUs on the same node to reduce communication overhead
 #SBATCH --gres=gpu:a40:4               # Request how many GPUs per node
@@ -12,7 +12,7 @@
 
 BATCH_SIZE=32 # 32 for DROID (larger action_dim=32)
 FSDP_DEVICES=4
-EXPT_NAME=droid_6tasks_multidataset_interp_0118
+EXPT_NAME=droid_6tasks_multidataset_interp_0120
 CONFIG_NAME=pi05_droid_finetune_multidataset
 RESUME=False
 
